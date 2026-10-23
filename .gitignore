@@ -1,0 +1,23 @@
+# Build output
+.build/
+.derivedData/
+.swiftpm/
+dist/
+*.dmg
+
+# macOS / Xcode local state
+.DS_Store
+*.xcuserstate
+xcuserdata/
+
+# Editor config (local paths)
+.vscode/
+
+# Secrets — never commit signing material or credentials
+.env
+.env.*
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+AuthKey_*.p8

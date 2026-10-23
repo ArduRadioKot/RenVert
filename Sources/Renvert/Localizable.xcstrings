@@ -1,0 +1,1320 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "A native macOS rename-to-convert utility. Files never leave this Mac.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нативная утилита для macOS: переименуйте файл — и он сконвертируется. Файлы не покидают этот Mac."
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "О программе"
+          }
+        }
+      }
+    },
+    "Add Folder…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить папку…"
+          }
+        }
+      }
+    },
+    "Allow Renvert in Privacy & Security → Files and Folders, then relaunch.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешите Renvert в «Конфиденциальность и безопасность → Файлы и папки» и перезапустите."
+          }
+        }
+      }
+    },
+    "An interrupted operation could not be recovered cleanly.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось аккуратно восстановить прерванную операцию."
+          }
+        }
+      }
+    },
+    "Archive entry points outside the destination.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Элемент архива указывает за пределы папки назначения."
+          }
+        }
+      }
+    },
+    "Ask first": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спросить сначала"
+          }
+        }
+      }
+    },
+    "Authors: FrogeeSoft": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Авторы: FrogeeSoft"
+          }
+        }
+      }
+    },
+    "AVFoundation cannot export this asset.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AVFoundation не может экспортировать этот файл."
+          }
+        }
+      }
+    },
+    "Background removal needs a raster image.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для удаления фона нужно растровое изображение."
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить"
+          }
+        }
+      }
+    },
+    "Cancel All": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить все"
+          }
+        }
+      }
+    },
+    "Change a file’s extension in Finder. Renvert converts the actual contents, keeps a backup, and stays in the menu bar.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Смените расширение файла в Finder. Renvert конвертирует содержимое, сохранит копию и останется в строке меню."
+          }
+        }
+      }
+    },
+    "Check Again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить снова"
+          }
+        }
+      }
+    },
+    "Clear History": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить историю"
+          }
+        }
+      }
+    },
+    "Conversion failed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось конвертировать"
+          }
+        }
+      }
+    },
+    "Conversion from %@ to %@ is not supported.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Конвертация из %1$@ в %2$@ не поддерживается."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversion from %1$@ to %2$@ is not supported."
+          }
+        }
+      }
+    },
+    "Conversions": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Конвертация"
+          }
+        }
+      }
+    },
+    "Convert": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Конвертировать"
+          }
+        }
+      }
+    },
+    "Convert automatically": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Конвертировать сразу"
+          }
+        }
+      }
+    },
+    "Convert this file?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Конвертировать файл?"
+          }
+        }
+      }
+    },
+    "Converted": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово"
+          }
+        }
+      }
+    },
+    "Could not create PDF.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось создать PDF."
+          }
+        }
+      }
+    },
+    "Could not decode image.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать изображение."
+          }
+        }
+      }
+    },
+    "Could not detect a known format.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось определить формат файла."
+          }
+        }
+      }
+    },
+    "Could not fit output under the requested size.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось уложиться в заданный размер."
+          }
+        }
+      }
+    },
+    "Could not rasterize for ImageMagick.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось растеризовать изображение для ImageMagick."
+          }
+        }
+      }
+    },
+    "Could not rasterize image.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось растеризовать изображение."
+          }
+        }
+      }
+    },
+    "Could not read image for OCR.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать изображение для распознавания текста."
+          }
+        }
+      }
+    },
+    "Could not write DOCX.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось записать DOCX."
+          }
+        }
+      }
+    },
+    "Could not write searchable PDF.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось записать PDF с текстовым слоем."
+          }
+        }
+      }
+    },
+    "Could not write XLSX.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось записать XLSX."
+          }
+        }
+      }
+    },
+    "Couldn’t change launch at login: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось изменить запуск при входе: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t undo: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось отменить: %@"
+          }
+        }
+      }
+    },
+    "Desktop": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рабочий стол"
+          }
+        }
+      }
+    },
+    "Destination already exists: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл назначения уже существует: %@"
+          }
+        }
+      }
+    },
+    "Dismiss": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыть"
+          }
+        }
+      }
+    },
+    "Documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Документы"
+          }
+        }
+      }
+    },
+    "Downloads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузки"
+          }
+        }
+      }
+    },
+    "Enabled": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включено"
+          }
+        }
+      }
+    },
+    "encode failed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "не удалось закодировать"
+          }
+        }
+      }
+    },
+    "Expected %@ but produced %@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидался %1$@, а получился %2$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expected %1$@ but produced %2$@."
+          }
+        }
+      }
+    },
+    "Export failed.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Экспорт не удался."
+          }
+        }
+      }
+    },
+    "File is still changing: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл ещё изменяется: %@"
+          }
+        }
+      }
+    },
+    "File not found: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл не найден: %@"
+          }
+        }
+      }
+    },
+    "Folders": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папки"
+          }
+        }
+      }
+    },
+    "Folders to watch": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Какие папки смотреть"
+          }
+        }
+      }
+    },
+    "General": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Основные"
+          }
+        }
+      }
+    },
+    "High": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Высокая"
+          }
+        }
+      }
+    },
+    "History": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "История"
+          }
+        }
+      }
+    },
+    "In progress": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В работе"
+          }
+        }
+      }
+    },
+    "Invalid modifier “%@”.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неверный модификатор «%@»."
+          }
+        }
+      }
+    },
+    "JPEG quality": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Качество JPEG"
+          }
+        }
+      }
+    },
+    "Keep backups for %lld days": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Keep backups for %lld day"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Keep backups for %lld days"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Хранить резервные копии %lld день"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Хранить резервные копии %lld дня"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Хранить резервные копии %lld дней"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Хранить резервные копии %lld дня"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Language": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Язык"
+          }
+        }
+      }
+    },
+    "Launch at login": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запускать при входе"
+          }
+        }
+      }
+    },
+    "Load": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нагрузка"
+          }
+        }
+      }
+    },
+    "Low": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Низкая"
+          }
+        }
+      }
+    },
+    "Medium": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Средняя"
+          }
+        }
+      }
+    },
+    "Monitoring paused": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отслеживание на паузе"
+          }
+        }
+      }
+    },
+    "No access to some folders": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа к некоторым папкам"
+          }
+        }
+      }
+    },
+    "No embedded subtitle track was found. Use +transcribe to create one.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Встроенные субтитры не найдены. Добавьте +transcribe, чтобы создать их."
+          }
+        }
+      }
+    },
+    "No encoder is available for %@ on this Mac.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На этом Mac нет кодировщика для %@."
+          }
+        }
+      }
+    },
+    "No foreground subject was found.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объект на переднем плане не найден."
+          }
+        }
+      }
+    },
+    "No pages to OCR.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет страниц для распознавания текста."
+          }
+        }
+      }
+    },
+    "No pending conversion": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет ожидающих конвертаций"
+          }
+        }
+      }
+    },
+    "No recent conversions": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет недавних операций"
+          }
+        }
+      }
+    },
+    "Not a readable DOCX file.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это не читаемый файл DOCX."
+          }
+        }
+      }
+    },
+    "Not enough free disk space.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Недостаточно свободного места на диске."
+          }
+        }
+      }
+    },
+    "Notifications": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уведомления"
+          }
+        }
+      }
+    },
+    "OCR needs an image or PDF.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для распознавания текста нужно изображение или PDF."
+          }
+        }
+      }
+    },
+    "Offer to convert new files whose extension does not match their contents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предлагать конвертировать новые файлы, расширение которых не совпадает с содержимым"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть настройки"
+          }
+        }
+      }
+    },
+    "Parallel conversions": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Параллельных конвертаций"
+          }
+        }
+      }
+    },
+    "Pause Monitoring": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приостановить"
+          }
+        }
+      }
+    },
+    "PDF consumer failed.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка записи PDF."
+          }
+        }
+      }
+    },
+    "PDF context failed.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось подготовить PDF."
+          }
+        }
+      }
+    },
+    "PDF could not be opened.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось открыть PDF."
+          }
+        }
+      }
+    },
+    "PDF page is missing.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Страница PDF не найдена."
+          }
+        }
+      }
+    },
+    "PEM body is not valid Base64.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Содержимое PEM — некорректный Base64."
+          }
+        }
+      }
+    },
+    "Performance": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Производительность"
+          }
+        }
+      }
+    },
+    "Permission denied: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа: %@"
+          }
+        }
+      }
+    },
+    "Preserve metadata when the format allows it": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранять метаданные, если формат это позволяет"
+          }
+        }
+      }
+    },
+    "Quit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выйти"
+          }
+        }
+      }
+    },
+    "Quit Renvert": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выйти из Renvert"
+          }
+        }
+      }
+    },
+    "Recent": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Недавние"
+          }
+        }
+      }
+    },
+    "Recursive": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рекурсивно"
+          }
+        }
+      }
+    },
+    "Relaunch": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перезапустить"
+          }
+        }
+      }
+    },
+    "Remove Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрать папку"
+          }
+        }
+      }
+    },
+    "Rename to convert": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переименуйте — конвертируется"
+          }
+        }
+      }
+    },
+    "Renvert asks for folder access only for the locations you select. Full Disk Access is optional and only needed to watch locations outside those folders.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступ запрашивается только к выбранным папкам. Полный доступ к диску нужен лишь для мест за их пределами."
+          }
+        }
+      }
+    },
+    "Renvert only watches these folders. Drag more in, or grant access when macOS asks.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renvert смотрит только эти папки. Перетащите новые или разрешите доступ, когда спросит macOS."
+          }
+        }
+      }
+    },
+    "Required tool “%@” is not available.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нужный инструмент «%@» недоступен."
+          }
+        }
+      }
+    },
+    "Result": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Результат"
+          }
+        }
+      }
+    },
+    "Resume Monitoring": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Возобновить"
+          }
+        }
+      }
+    },
+    "Settings…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки…"
+          }
+        }
+      }
+    },
+    "Show": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать"
+          }
+        }
+      }
+    },
+    "Show in Finder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать в Finder"
+          }
+        }
+      }
+    },
+    "Size": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Размер"
+          }
+        }
+      }
+    },
+    "Skip": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропустить"
+          }
+        }
+      }
+    },
+    "Source": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Исходный файл"
+          }
+        }
+      }
+    },
+    "Speech recognizer is not available for %@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Распознавание речи недоступно для %@."
+          }
+        }
+      }
+    },
+    "Start Watching": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начать отслеживание"
+          }
+        }
+      }
+    },
+    "Symbolic links are not converted.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Символические ссылки не конвертируются."
+          }
+        }
+      }
+    },
+    "System": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Системный"
+          }
+        }
+      }
+    },
+    "Temporary files are written on the same volume as the destination so replacements stay atomic.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Временные файлы пишутся на тот же диск, что и результат, поэтому замена файлов происходит атомарно."
+          }
+        }
+      }
+    },
+    "The conversion was cancelled.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Конвертация отменена."
+          }
+        }
+      }
+    },
+    "The file is still downloading from iCloud.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл ещё загружается из iCloud."
+          }
+        }
+      }
+    },
+    "The file name has no stem.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У имени файла нет основной части."
+          }
+        }
+      }
+    },
+    "The new language applies after a relaunch.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый язык применится после перезапуска."
+          }
+        }
+      }
+    },
+    "The new name is not a conversion command.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новое имя не является командой конвертации."
+          }
+        }
+      }
+    },
+    "The source file could not be read.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать исходный файл."
+          }
+        }
+      }
+    },
+    "Undo": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вернуть"
+          }
+        }
+      }
+    },
+    "Unknown format “%@”.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неизвестный формат «%@»."
+          }
+        }
+      }
+    },
+    "Unsupported config file.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неподдерживаемый файл конфигурации."
+          }
+        }
+      }
+    },
+    "Unsupported JSON value.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неподдерживаемое значение JSON."
+          }
+        }
+      }
+    },
+    "Use hardware acceleration": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Использовать аппаратное ускорение"
+          }
+        }
+      }
+    },
+    "Version %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Версия %@"
+          }
+        }
+      }
+    },
+    "Watch external volumes when they appear": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Следить за внешними дисками при подключении"
+          }
+        }
+      }
+    },
+    "Watch folders": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отслеживать папки"
+          }
+        }
+      }
+    },
+    "Watching folders": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отслеживание папок"
+          }
+        }
+      }
+    },
+    "WebP quality": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Качество WebP"
+          }
+        }
+      }
+    },
+    "When": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Когда"
+          }
+        }
+      }
+    },
+    "When a conversion is detected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Когда найдена конвертация"
+          }
+        }
+      }
+    },
+    "XLSX sheet is missing.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лист XLSX не найден."
+          }
+        }
+      }
+    },
+    "XML parse failed.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось разобрать XML."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

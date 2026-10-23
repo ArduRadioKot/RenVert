@@ -1,0 +1,27 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSAppleEventsUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Renvert uses system services so Finder can send selected files for conversion." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Renvert использует системные службы, чтобы Finder мог отправлять выбранные файлы на конвертацию." } }
+      }
+    },
+    "NSHumanReadableCopyright" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "© 2026 FrogeeSoft" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "© 2026 FrogeeSoft" } }
+      }
+    },
+    "NSSpeechRecognitionUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Renvert transcribes audio and video on this Mac when you add +transcribe or rename a file to SRT, VTT, or TXT." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Renvert расшифровывает аудио и видео прямо на этом Mac, когда вы добавляете +transcribe или переименовываете файл в SRT, VTT или TXT." } }
+      }
+    }
+  },
+  "version" : "1.0"
+}
