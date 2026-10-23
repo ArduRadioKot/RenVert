@@ -34,11 +34,37 @@ else
   echo -n 'APPL????' > "$DEST/Contents/PkgInfo"
 fi
 
-if [[ -x /opt/homebrew/bin/ffmpeg ]] && /opt/homebrew/bin/ffmpeg -version >/dev/null 2>&1; then
-  mkdir -p "$DEST/Contents/Resources/bin"
-  cp /opt/homebrew/bin/ffmpeg "$DEST/Contents/Resources/bin/ffmpeg" || true
+if [[ -x /opt/homebrew/bin/ffmpeg ]]; then
+  mkdir -p "$DEST/Contents/Resources/bin" "$DEST/Contents/Frameworks"
+  cp -L /opt/homebrew/bin/ffmpeg "$DEST/Contents/Resources/bin/ffmpeg"
+  python3 "$ROOT/scripts/bundle_dylibs.py" \
+    "$DEST/Contents/Resources/bin/ffmpeg" \
+    "$DEST/Contents/Frameworks"
 fi
 
-codesign --force --deep --sign - --entitlements "$ROOT/Sources/Renvert/Renvert.entitlements" "$DEST"
+FFENT="$(mktemp)"
+cat > "$FFENT" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>
+EOF
+if [[ -d "$DEST/Contents/Frameworks" ]]; then
+  while IFS= read -r -d '' lib; do
+    codesign --force --sign - "$lib"
+  done < <(find "$DEST/Contents/Frameworks" -type f -print0)
+fi
+if [[ -x "$DEST/Contents/Resources/bin/ffmpeg" ]]; then
+  codesign --force --sign - --entitlements "$FFENT" "$DEST/Contents/Resources/bin/ffmpeg"
+fi
+rm -f "$FFENT"
+codesign --force --sign - --options runtime --entitlements "$ROOT/Sources/Renvert/Renvert.entitlements" "$DEST"
 echo "Built $DEST"
 lipo -info "$DEST/Contents/MacOS/Renvert" || true
+if [[ -x "$DEST/Contents/Resources/bin/ffmpeg" ]]; then
+  env -i "$DEST/Contents/Resources/bin/ffmpeg" -hide_banner -version
+fi

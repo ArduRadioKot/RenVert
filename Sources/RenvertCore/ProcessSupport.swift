@@ -56,7 +56,7 @@ public enum ProcessRunner {
 }
 
 public enum ExternalToolLocator {
-    public static func find(_ name: String, extra: [URL] = []) -> URL? {
+    public static func candidates(_ name: String, extra: [URL] = []) -> [URL] {
         var candidates: [URL] = extra
         if let bundled = Bundle.main.resourceURL?.appendingPathComponent("bin/\(name)") {
             candidates.append(bundled)
@@ -70,13 +70,21 @@ public enum ExternalToolLocator {
             URL(fileURLWithPath: "/opt/local/bin/\(name)"),
             URL(fileURLWithPath: "/usr/bin/\(name)")
         ])
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        return candidates
     }
 
+    public static func find(_ name: String, extra: [URL] = []) -> URL? {
+        candidates(name, extra: extra).first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+
+    /// Tries each executable until one actually launches. A bundled binary for the wrong
+    /// architecture must not hide a working Homebrew install.
     public static var ffmpeg: URL? {
-        guard let url = find("ffmpeg") else { return nil }
-        let probe = ProcessRunner.run(executable: url.path, arguments: ["-version"], timeout: 5)
-        return probe.exitCode == 0 ? url : nil
+        for url in candidates("ffmpeg") where FileManager.default.isExecutableFile(atPath: url.path) {
+            let probe = ProcessRunner.run(executable: url.path, arguments: ["-version"], timeout: 5)
+            if probe.exitCode == 0 { return url }
+        }
+        return nil
     }
     public static var ffprobe: URL? { find("ffprobe") }
     public static var magick: URL? { find("magick") }
