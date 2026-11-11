@@ -18,13 +18,13 @@ struct RenvertApp: App {
         }
         .commands {
             CommandGroup(replacing: .appTermination) {
-                Button(String(localized: "Quit Renvert")) {
+                Button(L("Quit Renvert")) {
                     appDelegate.model.quit()
                 }
                 .keyboardShortcut("q", modifiers: .command)
             }
             CommandGroup(replacing: .appInfo) {
-                Button(String(localized: "About")) {
+                Button(L("About")) {
                     AppActivation.reveal()
                     NSApp.orderFrontStandardAboutPanel(options: [
                         .applicationName: "Renvert"
@@ -32,10 +32,13 @@ struct RenvertApp: App {
                 }
             }
             CommandGroup(replacing: .appSettings) {
-                Button(String(localized: "Settings…")) {
+                Button(L("Settings…")) {
                     WindowRouter.showSettings()
                 }
                 .keyboardShortcut(",", modifiers: .command)
+                Button(L("Check for Updates…")) {
+                    appDelegate.model.updates.check(userInitiated: true)
+                }
             }
         }
     }
@@ -87,6 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if model.showOnboarding {
             presentOnboarding()
         }
+        model.updates.canPrompt = { [weak self] in
+            self?.onboardingWindow?.isVisible != true
+        }
+        model.updates.start()
     }
 
     /// Logs who asked the app to quit, so an unexpected exit can be told apart from a crash.
@@ -137,7 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let window = makeWindow(
-            OnboardingView().environmentObject(model),
+            OnboardingView(),
             size: NSSize(width: 460, height: 560),
             style: [.titled, .closable]
         )
@@ -152,12 +159,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let window = makeWindow(
-            SettingsView().environmentObject(model),
+            SettingsView(),
             size: NSSize(width: 720, height: 500),
             style: [.titled, .closable, .miniaturizable, .resizable],
-            showsTitle: true
+            chromeless: false
         )
         window.toolbarStyle = .unified
+        window.setFrameAutosaveName("RenvertSettings")
         window.minSize = NSSize(width: 720, height: 480)
         window.makeKeyAndOrderFront(nil)
         settingsWindow = window
@@ -179,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel.isFloatingPanel = true
             panel.hidesOnDeactivate = false
             panel.isReleasedWhenClosed = false
-            applyGlass(to: panel, root: ConfirmationView().environmentObject(model), showsTitle: false)
+            install(ConfirmationView(), in: panel, chromeless: true)
             confirmPanel = panel
         }
         if let screen = NSScreen.main {
@@ -196,7 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ root: Content,
         size: NSSize,
         style: NSWindow.StyleMask,
-        showsTitle: Bool = false
+        chromeless: Bool = true
     ) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
@@ -206,20 +214,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         window.title = "Renvert"
         window.isReleasedWhenClosed = false
-        applyGlass(to: window, root: root, showsTitle: showsTitle)
+        install(root, in: window, chromeless: chromeless)
         window.center()
         return window
     }
 
-    private func applyGlass<Content: View>(to window: NSWindow, root: Content, showsTitle: Bool) {
+    /// Liquid Glass window with standard macOS controls on top.
+    ///
+    /// `chromeless` hides the title, for the welcome window and the confirmation panel.
+    private func install<Content: View>(_ root: Content, in window: NSWindow, chromeless: Bool) {
         window.titlebarAppearsTransparent = true
-        window.titleVisibility = showsTitle ? .visible : .hidden
-        // Dragging by the background steals mouseDown from SwiftUI buttons, so they never press.
-        // Titled windows still move from the title bar.
-        window.isMovableByWindowBackground = false
+        if chromeless {
+            window.titleVisibility = .hidden
+        }
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.contentView = GlassHost.make(root, look: .regular)
+        window.contentView = GlassHost.make(LocalizedRoot(model: model) { root }, fitsContent: false)
+    }
+}
+
+/// Rebuilds a window's content when the language changes so every string is looked up again.
+struct LocalizedRoot<Content: View>: View {
+    @ObservedObject var model: AppModel
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        content()
+            .environmentObject(model)
+            .environment(\.locale, Localization.locale)
+            .id(model.settings.language)
     }
 }
 

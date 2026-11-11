@@ -1,58 +1,61 @@
 import SwiftUI
 import AppKit
-
-enum GlassLook {
-    /// Most transparent Liquid Glass, used for the floating menu bar panel.
-    case clear
-    /// Standard Liquid Glass, used for windows that hold forms and tables.
-    case regular
-}
+#if canImport(RenvertCore)
+import RenvertCore
+#endif
 
 @MainActor
 enum GlassHost {
-    /// Wraps SwiftUI content in a window-level glass surface that samples the desktop behind the window.
+    /// Puts SwiftUI content on a Liquid Glass surface that samples the desktop behind the window.
     ///
-    /// The hosting view is the glass view's content, and its sizing options are turned off for
-    /// windows. Otherwise NavigationSplitView keeps its ideal height (about 2500 pt), gets
-    /// centered in the window, and the visible slice is empty glass.
-    static func make<Content: View>(
-        _ root: Content,
-        look: GlassLook,
-        cornerRadius: CGFloat = 0,
-        sizesToFitContent: Bool = false
-    ) -> NSView {
+    /// The glass is a sibling under the hosting view, not its parent. As the glass view's
+    /// `contentView` the hosting view sat below private material layers that swallowed clicks,
+    /// and SwiftUI could not reach the window's title bar and toolbar.
+    ///
+    /// `fitsContent` lets the content size the window (menu bar panel). Windows turn it off so a
+    /// NavigationSplitView takes the window's size instead of its own ideal height.
+    static func make<Content: View>(_ root: Content, cornerRadius: CGFloat = 0, fitsContent: Bool) -> NSView {
         let hosting = InteractiveHostingView(rootView: root)
-        if !sizesToFitContent {
+        if !fitsContent {
             hosting.sizingOptions = []
+            // Lets `navigationTitle` and SwiftUI toolbars drive the window's title bar.
+            hosting.sceneBridgingOptions = [.title, .toolbars]
         }
 
-        let container: NSView
+        let backdrop: NSView
         if #available(macOS 26, *) {
-            let glass = ClickableGlassEffectView()
-            // Untinted regular glass, as in Apple's own windows and Control Center:
-            // it picks its light or dark tone from the system appearance.
+            let glass = NSGlassEffectView()
+            // Regular glass frosts what is behind enough to keep text readable. On its own it
+            // turns into a near-black slab in Dark Mode, so a white tint lifts it toward the
+            // lighter tone of Apple's own panels.
             glass.style = .regular
             glass.cornerRadius = cornerRadius
-            glass.tintColor = nil
-            glass.contentView = hosting
-            container = glass
+            glass.tintColor = NSColor(name: nil) { appearance in
+                let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+                return NSColor.white.withAlphaComponent(dark ? 0.16 : 0.5)
+            }
+            backdrop = glass
         } else {
             let effect = NSVisualEffectView()
-            effect.material = look == .clear ? .popover : .windowBackground
+            effect.material = fitsContent ? .popover : .underWindowBackground
             effect.blendingMode = .behindWindow
             effect.state = .active
             if cornerRadius > 0 {
                 effect.maskImage = roundedMask(radius: cornerRadius)
             }
-            hosting.translatesAutoresizingMaskIntoConstraints = false
-            effect.addSubview(hosting)
+            backdrop = effect
+        }
+
+        let container = NSView()
+        for view in [backdrop, hosting] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(view)
             NSLayoutConstraint.activate([
-                hosting.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
-                hosting.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
-                hosting.topAnchor.constraint(equalTo: effect.topAnchor),
-                hosting.bottomAnchor.constraint(equalTo: effect.bottomAnchor)
+                view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                view.topAnchor.constraint(equalTo: container.topAnchor),
+                view.bottomAnchor.constraint(equalTo: container.bottomAnchor)
             ])
-            container = effect
         }
         return container
     }
@@ -70,22 +73,46 @@ enum GlassHost {
     }
 }
 
+extension View {
+    /// Liquid Glass button on macOS 26, the standard bordered button before it.
+    @ViewBuilder
+    func glassButton(prominent: Bool = false) -> some View {
+        if #available(macOS 26, *) {
+            if prominent {
+                buttonStyle(.glassProminent)
+            } else {
+                buttonStyle(.glass)
+            }
+        } else if prominent {
+            buttonStyle(.borderedProminent)
+        } else {
+            buttonStyle(.bordered)
+        }
+    }
+
+    /// Glass platter on macOS 26, a soft translucent fill before it.
+    @ViewBuilder
+    func glassPlatter(cornerRadius: CGFloat = 12) -> some View {
+        if #available(macOS 26, *) {
+            glassEffect(.regular.tint(.white.opacity(0.06)), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        } else {
+            background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.primary.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                    .allowsHitTesting(false)
+            )
+        }
+    }
+}
+
 enum AppActivation {
     static func reveal() {
         NSApp.activate(ignoringOtherApps: true)
         NotificationCenter.default.post(name: .renvertKeepStatusVisible, object: nil)
-    }
-}
-
-extension View {
-    /// A capsule button whose hit target is the label itself.
-    ///
-    /// `.glass` / `.glassProminent` nest another glass surface inside the window's
-    /// `NSGlassEffectView`. On macOS 26 that inner surface takes the click and the
-    /// button action never runs. This style draws on the glass and keeps the press
-    /// on the SwiftUI button.
-    func glassButton(prominent: Bool = false) -> some View {
-        buttonStyle(LiquidButtonStyle(prominent: prominent))
     }
 }
 
@@ -94,81 +121,7 @@ final class InteractiveHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// Glass plate whose private material layers sit above `contentView` and otherwise swallow clicks.
-@available(macOS 26, *)
-final class ClickableGlassEffectView: NSGlassEffectView {
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        // `point` is in our superview's space, and `hitTest` on the content view expects its
-        // superview's space too. Converting into the (flipped) hosting view itself mirrors Y,
-        // so clicks land on the wrong control.
-        guard frame.contains(point) else { return nil }
-        guard let contentView, let host = contentView.superview else { return super.hitTest(point) }
-        let local = host.convert(point, from: superview)
-        if let hit = contentView.hitTest(local) {
-            return hit
-        }
-        return contentView.frame.contains(local) ? contentView : nil
-    }
-}
-
-private struct LiquidButtonStyle: ButtonStyle {
-    var prominent: Bool
-    @Environment(\.controlSize) private var controlSize
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: fontSize, weight: prominent ? .semibold : .medium))
-            .padding(.horizontal, horizontalPadding)
-            .padding(.vertical, verticalPadding)
-            .foregroundStyle(prominent ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-            .contentShape(Capsule())
-            .background {
-                Capsule(style: .continuous)
-                    .fill(prominent ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary.opacity(0.08)))
-                    .overlay {
-                        Capsule(style: .continuous)
-                            .strokeBorder(Color.primary.opacity(prominent ? 0 : 0.12), lineWidth: 0.5)
-                    }
-                    .allowsHitTesting(false)
-            }
-            .opacity(!isEnabled ? 0.4 : (configuration.isPressed ? 0.72 : 1))
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-
-    private var fontSize: CGFloat {
-        switch controlSize {
-        case .mini: 10
-        case .small: 11
-        case .large: 14
-        case .extraLarge: 15
-        default: 13
-        }
-    }
-
-    private var horizontalPadding: CGFloat {
-        switch controlSize {
-        case .mini: 7
-        case .small: 9
-        case .large: 14
-        case .extraLarge: 18
-        default: 12
-        }
-    }
-
-    private var verticalPadding: CGFloat {
-        switch controlSize {
-        case .mini: 2
-        case .small: 3
-        case .large: 6
-        case .extraLarge: 8
-        default: 5
-        }
-    }
-}
-
-/// Control Center–style module: a soft platter that sits on top of the glass instead of adding more glass.
+/// Grouped-box platter for banners and grouped rows outside a Form.
 struct GlassModule<Content: View>: View {
     var title: String?
     var spacing: CGFloat = 10
@@ -185,15 +138,7 @@ struct GlassModule<Content: View>: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.primary.opacity(0.05))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-                .allowsHitTesting(false)
-        )
+        .glassPlatter()
     }
 }
 
@@ -210,21 +155,20 @@ struct AccessWarning: View {
                         .frame(width: 26, height: 26)
                         .background(Color.orange.gradient, in: Circle())
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(String(localized: "No access to some folders"))
+                        Text(L("No access to some folders"))
                             .font(.system(size: 13, weight: .semibold))
                         Text(model.blockedFolders.map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: ", "))
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
-                        Text(String(localized: "Allow Renvert in Privacy & Security → Files and Folders, then relaunch."))
+                        Text(L("Allow Renvert in Privacy & Security → Files and Folders, then relaunch."))
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 8) {
-                            Button(String(localized: "Open Settings")) { model.openPrivacySettings() }
-                                .glassButton(prominent: true)
-                            Button(String(localized: "Check Again")) { model.startWatching() }
-                                .glassButton()
+                        // Translated titles can be too long to sit side by side in the menu panel.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) { actions }
+                            VStack(alignment: .leading, spacing: 6) { actions }
                         }
                         .controlSize(.small)
                         .padding(.top, 2)
@@ -232,6 +176,16 @@ struct AccessWarning: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        Button(L("Open Settings")) { model.openPrivacySettings() }
+            .glassButton(prominent: true)
+            .fixedSize()
+        Button(L("Check Again")) { model.startWatching() }
+            .glassButton()
+            .fixedSize()
     }
 }
 
@@ -260,7 +214,7 @@ struct ErrorBanner: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Dismiss"))
+                    .accessibilityLabel(L("Dismiss"))
                 }
             }
         }
@@ -275,10 +229,10 @@ struct HoverHighlight: ViewModifier {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(Color.primary.opacity(hovering ? 0.07 : 0))
             )
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .onHover { hovering = $0 }
             .animation(.easeOut(duration: 0.12), value: hovering)
     }

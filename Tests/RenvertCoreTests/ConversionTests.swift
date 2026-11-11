@@ -1,6 +1,7 @@
 import XCTest
 import AppKit
 import ImageIO
+import PDFKit
 import UniformTypeIdentifiers
 @testable import RenvertCore
 
@@ -136,7 +137,168 @@ final class ConversionTests: XCTestCase {
         )
         let text = try String(contentsOf: csv, encoding: .utf8)
         XCTAssertTrue(text.contains("apples"))
-        XCTAssertEqual(try FormatDetector.detect(at: csv).id, .txt)
+        XCTAssertEqual(try FormatDetector.detect(at: csv).id, .csv)
+    }
+
+    func testTextFormatsAreRecognized() throws {
+        let csv = temp.appendingPathComponent("data.csv")
+        try "name,city\nalice,rome\n".write(to: csv, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try FormatDetector.detect(at: csv).id, .csv)
+
+        let prose = temp.appendingPathComponent("note.txt")
+        try "Hello, world\nYes, please\n".write(to: prose, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try FormatDetector.detect(at: prose).id, .txt)
+
+        let html = temp.appendingPathComponent("page.html")
+        try "<!DOCTYPE html><html><body><p>Hello</p></body></html>".write(to: html, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try FormatDetector.detect(at: html).id, .html)
+
+        let xml = temp.appendingPathComponent("note.xml")
+        try "<?xml version=\"1.0\"?><note><to>Ada</to></note>".write(to: xml, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try FormatDetector.detect(at: xml).id, .xml)
+
+        var heif = Data([0x00, 0x00, 0x00, 0x18])
+        heif.append(contentsOf: "ftypheif".utf8)
+        heif.append(contentsOf: [0, 0, 0, 0, 0, 0, 0, 0])
+        let heifURL = temp.appendingPathComponent("photo.heif")
+        try heif.write(to: heifURL)
+        XCTAssertEqual(try FormatDetector.detect(at: heifURL).id, .heic)
+        XCTAssertEqual(FormatRegistry.resolve("heif"), .heic)
+        XCTAssertEqual(FormatRegistry.resolve("aif"), .aiff)
+
+        let ambiguous = DetectedFormat(id: .txt, confidence: 0.3, via: "text")
+        XCTAssertEqual(FormatDetector.refine(ambiguous, originalFilename: "data.csv").id, .csv)
+        let htmlAsXML = DetectedFormat(id: .xml, confidence: 0.6, via: "xml")
+        XCTAssertEqual(FormatDetector.refine(htmlAsXML, originalFilename: "page.html").id, .html)
+    }
+
+    func testTransparentPNGBecomesJPEGOnWhite() throws {
+        let png = temp.appendingPathComponent("glass.png")
+        let image = rgbaImage(width: 16, height: 16, red: 1, green: 0, blue: 0, alpha: 0.4)
+        try ImageConverter().writeImage(image, to: png, utType: .png, spec: OutputSpec(format: .png), settings: AppSettings())
+        let dest = temp.appendingPathComponent("glass.jpg")
+        try ImageConverter().convert(
+            from: png,
+            detected: .png,
+            spec: OutputSpec(format: .jpeg),
+            to: dest,
+            context: ConversionContext(settings: AppSettings(), cancellation: CancellationToken())
+        )
+        XCTAssertEqual(try FormatDetector.detect(at: dest).id, .jpeg)
+        let rep = try XCTUnwrap(NSBitmapImageRep(data: Data(contentsOf: dest)))
+        let color = try XCTUnwrap(rep.colorAt(x: 0, y: 0)?.usingColorSpace(.sRGB))
+        XCTAssertGreaterThan(color.redComponent, 0.7)
+        XCTAssertGreaterThan(color.redComponent, color.blueComponent + 0.2)
+        XCTAssertEqual(rep.pixelsWide, 16)
+        XCTAssertEqual(rep.pixelsHigh, 16)
+    }
+
+    func testResizeUsesExactPixels() throws {
+        let image = rgbaImage(width: 80, height: 40, red: 0, green: 0, blue: 1, alpha: 1)
+        let scaled = try ImageConverter().applyImageModifiers(
+            image,
+            [.width(40)],
+            context: ConversionContext(settings: AppSettings(), cancellation: CancellationToken())
+        )
+        let size = ImageRaster.pixelSize(of: scaled)
+        XCTAssertEqual(Int(size.width), 40)
+        XCTAssertEqual(Int(size.height), 20)
+    }
+
+    func testFFmpegFiltersAreASingleChain() {
+        let gif = FFmpegArguments.make(
+            source: URL(fileURLWithPath: "/in.mp4"),
+            spec: OutputSpec(format: .gif, modifiers: [.maxHeight(480), .reverse]),
+            destination: URL(fileURLWithPath: "/out.gif")
+        )
+        let videoFilters = gif.indices.filter { gif[$0] == "-vf" }
+        XCTAssertEqual(videoFilters.count, 1)
+        let chain = gif[videoFilters[0] + 1]
+        XCTAssertTrue(chain.contains("scale=-2:480"))
+        XCTAssertTrue(chain.contains("reverse"))
+        XCTAssertTrue(chain.contains("fps=12"))
+
+        let audio = FFmpegArguments.make(
+            source: URL(fileURLWithPath: "/in.wav"),
+            spec: OutputSpec(format: .mp3, modifiers: [.speed(1.5), .normalize]),
+            destination: URL(fileURLWithPath: "/out.mp3")
+        )
+        XCTAssertFalse(audio.contains("-vf"))
+        let audioFilters = audio.indices.filter { audio[$0] == "-af" }
+        XCTAssertEqual(audioFilters.count, 1)
+        XCTAssertTrue(audio[audioFilters[0] + 1].contains("atempo="))
+        XCTAssertTrue(audio[audioFilters[0] + 1].contains("loudnorm"))
+    }
+
+    func testEngineConvertsCSVHTMLAndSheets() throws {
+        let support = temp.appendingPathComponent("support", isDirectory: true)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        let engine = ConversionEngine()
+        let backups = BackupStore(directory: support)
+        let journal = OperationJournal(directory: support)
+        let history = HistoryStore(directory: support)
+        let settings = AppSettings(confirmationMode: .automatic)
+
+        let sheet = temp.appendingPathComponent("table.csv")
+        try XLSXWriter.write([["name", "qty"], ["apples", "3"]], to: temp.appendingPathComponent("table.xlsx"))
+        try FileManager.default.moveItem(at: temp.appendingPathComponent("table.xlsx"), to: sheet)
+        let sheetOutcome = try engine.perform(
+            PendingConversion(
+                sourceURL: temp.appendingPathComponent("table.xlsx"),
+                commandURL: sheet,
+                detected: try FormatDetector.detect(at: sheet),
+                command: try TransformationParser.parseFilename(sheet.lastPathComponent),
+                originalName: "table.xlsx"
+            ),
+            settings: settings,
+            backups: backups,
+            journal: journal,
+            history: history,
+            ignore: IgnoreSet(),
+            cancellation: CancellationToken()
+        )
+        let csvText = try String(contentsOf: sheetOutcome.destinations[0], encoding: .utf8)
+        XCTAssertTrue(csvText.contains("apples"))
+
+        let page = temp.appendingPathComponent("page.pdf")
+        try "<!DOCTYPE html><html><body><p>Hello HTML</p></body></html>".write(to: page, atomically: true, encoding: .utf8)
+        let pageOutcome = try engine.perform(
+            PendingConversion(
+                sourceURL: temp.appendingPathComponent("page.html"),
+                commandURL: page,
+                detected: try FormatDetector.detect(at: page),
+                command: try TransformationParser.parseFilename(page.lastPathComponent),
+                originalName: "page.html"
+            ),
+            settings: settings,
+            backups: backups,
+            journal: journal,
+            history: history,
+            ignore: IgnoreSet(),
+            cancellation: CancellationToken()
+        )
+        XCTAssertEqual(try FormatDetector.detect(at: pageOutcome.destinations[0]).id, .pdf)
+        let document = try XCTUnwrap(PDFDocument(url: pageOutcome.destinations[0]))
+        XCTAssertTrue(document.string?.contains("Hello HTML") == true)
+
+        let table = temp.appendingPathComponent("data.xlsx")
+        try "name,city\nalice,rome\n".write(to: table, atomically: true, encoding: .utf8)
+        let tableOutcome = try engine.perform(
+            PendingConversion(
+                sourceURL: temp.appendingPathComponent("data.csv"),
+                commandURL: table,
+                detected: try FormatDetector.detect(at: table),
+                command: try TransformationParser.parseFilename(table.lastPathComponent),
+                originalName: "data.csv"
+            ),
+            settings: settings,
+            backups: backups,
+            journal: journal,
+            history: history,
+            ignore: IgnoreSet(),
+            cancellation: CancellationToken()
+        )
+        XCTAssertEqual(try FormatDetector.detect(at: tableOutcome.destinations[0]).id, .xlsx)
     }
 
     func testDOCXToPDF() throws {
@@ -307,6 +469,22 @@ final class ConversionTests: XCTestCase {
         for sample in samples { append(sample) }
         try data.write(to: url)
         return url
+    }
+
+    private func rgbaImage(width: Int, height: Int, red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) -> NSImage {
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        let ctx = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        ctx.setFillColor(CGColor(red: red, green: green, blue: blue, alpha: alpha))
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return ImageRaster.image(from: ctx.makeImage()!)
     }
 
     private func solidImage(_ color: NSColor, size: NSSize) -> NSImage {

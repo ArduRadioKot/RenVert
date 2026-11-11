@@ -53,10 +53,9 @@ final class StatusBarController: NSObject {
     private func presentPanel() {
         guard let model else { return }
         let content = GlassHost.make(
-            MenuBarView().environmentObject(model),
-            look: .clear,
+            LocalizedRoot(model: model) { MenuBarView() },
             cornerRadius: Self.panelCornerRadius,
-            sizesToFitContent: true
+            fitsContent: true
         )
         let panel = MenuPanel(
             contentRect: NSRect(origin: .zero, size: content.fittingSize),
@@ -157,7 +156,7 @@ final class StatusBarController: NSObject {
         panel.invalidateShadow()
     }
 
-    private static let panelCornerRadius: CGFloat = 24
+    private static let panelCornerRadius: CGFloat = 16
 
     /// New status items land at the far left of the extras, which is behind the notch on MacBooks.
     /// macOS reads this per-item default, measured from the right screen edge, before placing the item.

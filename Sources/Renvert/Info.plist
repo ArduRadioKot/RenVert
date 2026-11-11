@@ -31,6 +31,8 @@
 	<string>© 2026 FrogeeSoft</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>RenvertGitHubRepository</key>
+	<string>ArduRadioKot/RenVert</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Renvert transcribes audio and video on this Mac when you add +transcribe or rename a file to SRT, VTT, or TXT.</string>

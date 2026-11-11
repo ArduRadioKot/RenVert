@@ -16,11 +16,11 @@ struct OnboardingView: View {
                 .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
                 .padding(.bottom, 18)
 
-            Text(String(localized: "Rename to convert"))
+            Text(L("Rename to convert"))
                 .font(.system(size: 26, weight: .bold))
                 .padding(.bottom, 8)
 
-            Text(String(localized: "Change a file’s extension in Finder. Renvert converts the actual contents, keeps a backup, and stays in the menu bar."))
+            Text(L("Change a file’s extension in Finder. Renvert converts the actual contents, keeps a backup, and stays in the menu bar."))
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -29,13 +29,13 @@ struct OnboardingView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 22)
 
-            GlassModule(title: String(localized: "Folders to watch"), spacing: 2) {
-                folderRow(String(localized: "Desktop"), symbol: "menubar.dock.rectangle", isOn: $desktop)
-                folderRow(String(localized: "Downloads"), symbol: "arrow.down.circle.fill", isOn: $downloads)
-                folderRow(String(localized: "Documents"), symbol: "doc.fill", isOn: $documents)
+            GlassModule(title: L("Folders to watch"), spacing: 2) {
+                folderRow(L("Desktop"), symbol: "menubar.dock.rectangle", isOn: $desktop)
+                folderRow(L("Downloads"), symbol: "arrow.down.circle.fill", isOn: $downloads)
+                folderRow(L("Documents"), symbol: "doc.fill", isOn: $documents)
             }
 
-            Text(String(localized: "Renvert asks for folder access only for the locations you select. Full Disk Access is optional and only needed to watch locations outside those folders."))
+            Text(L("Renvert asks for folder access only for the locations you select. Full Disk Access is optional and only needed to watch locations outside those folders."))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -55,7 +55,7 @@ struct OnboardingView: View {
                 model.completeOnboarding(selected: folders)
                 NotificationCenter.default.post(name: .renvertCloseOnboarding, object: nil)
             } label: {
-                Text(String(localized: "Start Watching"))
+                Text(L("Start Watching"))
                     .frame(maxWidth: .infinity)
             }
             .keyboardShortcut(.defaultAction)
@@ -96,7 +96,7 @@ struct ConfirmationView: View {
                 HStack(spacing: 12) {
                     FormatBadge(text: pending.detected.id.rawValue)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(String(localized: "Convert this file?"))
+                        Text(L("Convert this file?"))
                             .font(.system(size: 13, weight: .semibold))
                         Text(pending.commandURL.lastPathComponent)
                             .font(.system(size: 12))
@@ -110,22 +110,22 @@ struct ConfirmationView: View {
                 }
                 Spacer(minLength: 0)
                 HStack(spacing: 8) {
-                    Button(String(localized: "Show in Finder")) {
+                    Button(L("Show in Finder")) {
                         model.reveal(pending.commandURL.path)
                     }
                     .glassButton()
                     .fixedSize()
                     Spacer(minLength: 8)
-                    Button(String(localized: "Skip")) { model.declinePending() }
+                    Button(L("Skip")) { model.declinePending() }
                         .glassButton()
                         .fixedSize()
-                    Button(String(localized: "Convert")) { model.confirmPending() }
+                    Button(L("Convert")) { model.confirmPending() }
                         .keyboardShortcut(.defaultAction)
                         .glassButton(prominent: true)
                         .fixedSize()
                 }
             } else {
-                Text(String(localized: "No pending conversion"))
+                Text(L("No pending conversion"))
                     .foregroundStyle(.secondary)
             }
         }

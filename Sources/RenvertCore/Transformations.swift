@@ -184,6 +184,7 @@ public struct OutputSpec: Equatable, Sendable {
 
     public func maxHeight() -> Int? {
         for modifier in modifiers { if case .maxHeight(let value) = modifier { return value } }
+        for modifier in modifiers { if case .height(let value) = modifier { return value } }
         return nil
     }
 

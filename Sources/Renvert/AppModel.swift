@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Combine
 import SwiftUI
 import UserNotifications
 import ServiceManagement
@@ -18,11 +19,13 @@ final class AppModel: ObservableObject {
     @Published var blockedFolders: [String] = []
     @Published var showOnboarding: Bool
     @Published var lastError: String?
-    @Published var needsRelaunchForLanguage = false
+    @Published var updatePhase: UpdatePhase = .idle
 
     let coordinator: RenameCoordinator
+    let updates = UpdateController()
     let settingsStore: SettingsStore
     let supportDirectory: URL
+    private var updateObservers: Set<AnyCancellable> = []
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -31,6 +34,7 @@ final class AppModel: ObservableObject {
         supportDirectory = support
         let store = SettingsStore(directory: support)
         Self.writeLanguagePreference(store.settings.language)
+        Localization.configure(base: Self.stringsBundle, language: store.settings.language)
         settingsStore = store
         settings = store.settings
         isMonitoring = store.settings.monitoringEnabled
@@ -57,6 +61,12 @@ final class AppModel: ObservableObject {
         refreshHistory()
         applyLaunchAtLogin()
         requestNotificationPermission()
+        updates.$phase
+            .receive(on: RunLoop.main)
+            .sink { [weak self] phase in
+                self?.updatePhase = phase
+            }
+            .store(in: &updateObservers)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if self.settings.monitoringEnabled {
@@ -133,28 +143,29 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// AppKit reads the preferred languages once at startup, so a new language needs a relaunch.
+    /// Renvert's own strings switch at once; views rebuild because they are keyed on the language.
     private func applyLanguage() {
         Self.writeLanguagePreference(settings.language)
-        needsRelaunchForLanguage = true
+        Localization.setLanguage(settings.language)
+        objectWillChange.send()
     }
 
-    /// Must run before the first localized lookup, or the bundle keeps the previous language until relaunch.
+    /// Bundle that holds the compiled string catalog.
+    private static var stringsBundle: Bundle {
+        #if SWIFT_PACKAGE
+        Bundle.module
+        #else
+        Bundle.main
+        #endif
+    }
+
+    /// System-provided text (open panels, standard controls) follows this from the next launch.
     private static func writeLanguagePreference(_ language: AppLanguage) {
         if language == .system {
             UserDefaults.standard.removeObject(forKey: "AppleLanguages")
         } else {
             UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")
         }
-    }
-
-    func relaunch() {
-        let bundlePath = Bundle.main.bundlePath
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "sleep 0.5; /usr/bin/open \"$0\"", bundlePath]
-        try? task.run()
-        NSApp.terminate(nil)
     }
 
     func removeFolder(_ folder: WatchedFolder) {
@@ -192,7 +203,7 @@ final class AppModel: ObservableObject {
             refreshHistory()
         } catch {
             refreshHistory()
-            lastError = String(localized: "Couldn’t undo: \(error.localizedDescription)")
+            lastError = L("Couldn’t undo: \(error.localizedDescription)")
         }
     }
 
@@ -229,7 +240,7 @@ final class AppModel: ObservableObject {
             }
         } catch {
             AppLog.error("Launch at login: \(error.localizedDescription)")
-            lastError = String(localized: "Couldn’t change launch at login: \(error.localizedDescription)")
+            lastError = L("Couldn’t change launch at login: \(error.localizedDescription)")
             let actual = SMAppService.mainApp.status == .enabled
             if actual != settings.launchAtLogin {
                 settingsStore.update { $0.launchAtLogin = actual }
@@ -245,7 +256,7 @@ final class AppModel: ObservableObject {
     private func postNotification(title: String, body: String) {
         guard settings.notificationsEnabled else { return }
         let content = UNMutableNotificationContent()
-        content.title = title == "Converted" ? String(localized: "Converted") : String(localized: "Conversion failed")
+        content.title = title == "Converted" ? L("Converted") : L("Conversion failed")
         content.body = body
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)

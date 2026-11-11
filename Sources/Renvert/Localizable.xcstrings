@@ -1314,6 +1314,226 @@
           }
         }
       }
+    },
+    "Check for Updates…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить обновления…"
+          }
+        }
+      }
+    },
+    "Check for updates automatically": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверять обновления автоматически"
+          }
+        }
+      }
+    },
+    "Checking for updates…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверка обновлений…"
+          }
+        }
+      }
+    },
+    "Couldn’t check for updates.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось проверить обновления."
+          }
+        }
+      }
+    },
+    "Couldn’t check for updates: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось проверить обновления: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t install the update: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось установить обновление: %@"
+          }
+        }
+      }
+    },
+    "Downloading update…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка обновления…"
+          }
+        }
+      }
+    },
+    "Install Update": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установить обновление"
+          }
+        }
+      }
+    },
+    "Installing update…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установка обновления…"
+          }
+        }
+      }
+    },
+    "Later": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позже"
+          }
+        }
+      }
+    },
+    "No GitHub releases yet.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На GitHub пока нет релизов."
+          }
+        }
+      }
+    },
+    "Release Notes": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что нового"
+          }
+        }
+      }
+    },
+    "Renvert %@ is available": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступен Renvert %@"
+          }
+        }
+      }
+    },
+    "Renvert can’t update itself from this folder. Move it to Applications and try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renvert не может обновиться из этой папки. Перенесите его в «Программы» и повторите."
+          }
+        }
+      }
+    },
+    "Renvert is up to date.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установлена последняя версия Renvert."
+          }
+        }
+      }
+    },
+    "The app will relaunch after the update is installed.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "После установки приложение перезапустится."
+          }
+        }
+      }
+    },
+    "The disk image could not be opened.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось открыть образ диска."
+          }
+        }
+      }
+    },
+    "The disk image does not contain this version of Renvert.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В образе нет этой версии Renvert."
+          }
+        }
+      }
+    },
+    "The download was not a Renvert disk image.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загруженный файл не является образом Renvert."
+          }
+        }
+      }
+    },
+    "The release has no Renvert disk image.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В релизе нет образа Renvert."
+          }
+        }
+      }
+    },
+    "Update to %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить до %@"
+          }
+        }
+      }
+    },
+    "Updates come from GitHub releases.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновления берутся из релизов на GitHub."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

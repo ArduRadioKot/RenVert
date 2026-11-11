@@ -31,6 +31,7 @@ public final class ConversionEngine {
     private let archives = ArchiveConverter()
     private let configs = ConfigConverter()
     private let intelligence = IntelligenceConverter()
+    private let models = ModelConverter()
     private let misc = MiscConverter()
 
     public init() {}
@@ -39,14 +40,18 @@ public final class ConversionEngine {
         if FormatRegistry.support(from: source, to: target) == .unavailable { return nil }
         let src = FormatRegistry.descriptor(for: source)
         let dst = FormatRegistry.descriptor(for: target)
-        if target == .txt && (src.category == .image || source == .pdf) { return intelligence }
+        // A PDF's own text layer is read by the document converter, which falls back to OCR.
+        if target == .txt && src.category == .image { return intelligence }
         if dst.category == .subtitle && (src.category == .audio || src.category == .video) { return media }
-        if src.category == .image || (source == .pdf && imageEncodable.contains(target)) { return image }
+        if source == .pdf && imageEncodable.contains(target) { return documents }
+        if src.category == .image { return image }
         if src.category == .audio || src.category == .video { return media }
+        if [.csv, .tsv, .xlsx].contains(source) && nativeDocuments.contains(target) { return documents }
         if src.category == .document || target == .pdf || target == .docx { return documents }
-        if src.category == .spreadsheet || tableFormats.contains(target) && src.category != .config { return sheets }
+        if src.category == .spreadsheet || (tableFormats.contains(target) && src.category != .config) { return sheets }
         if src.category == .config { return configs }
         if src.category == .archive || source == .folder { return archives }
+        if src.category == .model { return models }
         return misc
     }
 
@@ -63,7 +68,7 @@ public final class ConversionEngine {
         let started = Date()
         let source = pending.commandURL
         let recordID = pending.id
-        let detected = try FormatDetector.detect(at: source)
+        let detected = try FormatDetector.detect(at: source, originalFilename: pending.originalName)
         try cancellation.throwIfCancelled()
 
         let sourceSize = (try? FileIdentity.record(for: source).size) ?? 0
@@ -125,11 +130,19 @@ public final class ConversionEngine {
 
                 let temp = try AtomicWriter.sameVolumeTemp(near: dest, ext: FormatRegistry.preferredExtension(for: spec.format))
                 createdTemps.append(temp)
-                let context = ConversionContext(settings: settings, cancellation: cancellation) { value in
+                var context = ConversionContext(settings: settings, cancellation: cancellation) { value in
                     let overall = (Double(index) + value) / Double(pending.command.outputs.count)
                     onProgress?(overall)
                 }
-                try converter.convert(from: source, detected: detected.id, spec: spec, to: temp, context: context)
+                let extras = ExtraOutputs()
+                context.extraOutputs = extras
+                do {
+                    try converter.convert(from: source, detected: detected.id, spec: spec, to: temp, context: context)
+                } catch {
+                    createdTemps.append(contentsOf: extras.all)
+                    throw error
+                }
+                createdTemps.append(contentsOf: extras.all)
                 try verify(temp, expected: spec.format)
 
                 if dest.standardizedFileURL == source.standardizedFileURL {
@@ -143,6 +156,21 @@ public final class ConversionEngine {
                     ignore.remember(url: dest, key: try? FileIdentity.key(for: dest))
                 }
                 destinations.append(dest)
+
+                // Further pages land next to the first as "Name 2.ext", "Name 3.ext".
+                let stem = dest.deletingPathExtension().lastPathComponent
+                var number = 2
+                for extra in extras.all {
+                    var target: URL
+                    repeat {
+                        target = dest.deletingLastPathComponent()
+                            .appendingPathComponent("\(stem) \(number).\(dest.pathExtension)")
+                        number += 1
+                    } while FileManager.default.fileExists(atPath: target.path)
+                    try AtomicWriter.move(extra, to: target)
+                    ignore.remember(url: target, key: try? FileIdentity.key(for: target))
+                    destinations.append(target)
+                }
             }
 
             if !destinations.contains(where: { $0.standardizedFileURL == source.standardizedFileURL }) {
@@ -232,19 +260,53 @@ public final class ConversionEngine {
 
     private func verify(_ url: URL, expected: FormatID) throws {
         if expected == .folder { return }
+        if extensionOnlyFormats.contains(expected) {
+            // No signature to check: an empty or missing file is the only detectable failure.
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            guard size > 0 else { throw RenvertError.formatMismatch(expected: expected.rawValue, actual: "empty") }
+            return
+        }
         let detected = try FormatDetector.detect(at: url)
         let aliases: [FormatID: Set<FormatID>] = [
             .jpeg: [.jpeg],
             .mp4: [.mp4, .mov],
+            .mov: [.mov, .mp4],
             .m4a: [.m4a, .aac, .mp4],
+            .aac: [.aac, .m4a, .mp4],
+            .alac: [.alac, .m4a, .mp4],
             .zip: [.zip, .docx, .xlsx, .pptx, .epub],
             .docx: [.docx, .zip],
             .xlsx: [.xlsx, .zip],
+            .pptx: [.pptx, .zip],
+            .epub: [.epub, .zip],
             .tgz: [.tgz, .gzip],
-            .gzip: [.gzip, .tgz]
+            .odt: [.odt, .zip],
+            .cbt: [.cbt, .tar],
+            .cbz: [.cbz, .zip],
+            .gzip: [.gzip, .tgz],
+            .csv: [.csv, .txt],
+            .tsv: [.tsv, .txt],
+            .markdown: [.markdown, .txt],
+            .yaml: [.yaml, .txt],
+            .toml: [.toml, .txt],
+            .html: [.html, .xml],
+            .xml: [.xml, .html],
+            .srt: [.srt, .txt, .vtt],
+            .vtt: [.vtt, .txt, .srt],
+            .webm: [.webm, .mkv],
+            .mkv: [.mkv, .webm],
+            .opus: [.opus, .ogg],
+            .ogg: [.ogg, .opus]
         ]
         if detected.id == expected { return }
         if aliases[expected]?.contains(detected.id) == true { return }
+        // Plain-text formats share their bytes: a one-line TOML reads as text, a table saved
+        // as .txt reads as CSV. Any text is acceptable where text was asked for.
+        let textual: Set<FormatID> = [
+            .txt, .markdown, .html, .xml, .csv, .tsv, .yaml, .toml, .json, .plist, .srt, .vtt,
+            .adoc, .rst, .org, .svg
+        ]
+        if textual.contains(expected), textual.contains(detected.id), expected != .html, expected != .json, expected != .plist { return }
         throw RenvertError.formatMismatch(expected: expected.rawValue, actual: detected.id.rawValue)
     }
 
@@ -343,6 +405,25 @@ public final class RenameCoordinator: FileSystemMonitorDelegate {
         }
     }
 
+    /// Tells a rename made by a person from the way apps save files.
+    ///
+    /// Editors write to a temporary file and rename it over the document ("safe save"), and
+    /// downloads arrive as `.crdownload` or `.part`. Those are renames too, but nobody asked
+    /// for a conversion. A request is a file that stays in its folder and trades one known
+    /// extension for another.
+    static func isUserRename(from oldURL: URL, to newURL: URL) -> Bool {
+        guard oldURL.deletingLastPathComponent().standardizedFileURL == newURL.deletingLastPathComponent().standardizedFileURL else {
+            return false
+        }
+        let oldName = oldURL.lastPathComponent
+        if oldName.hasPrefix(".") || oldName.hasPrefix("~") || oldName.hasSuffix("~") { return false }
+        let oldExt = oldURL.pathExtension.lowercased()
+        if oldExt.isEmpty { return true }
+        let temporary: Set<String> = ["tmp", "temp", "part", "partial", "crdownload", "download", "swp", "swx", "bak", "lock"]
+        if temporary.contains(oldExt) { return false }
+        return FormatRegistry.resolve(oldExt) != nil
+    }
+
     private func schedule(oldURL: URL, newURL: URL) {
         if ignore.contains(url: newURL, key: try? FileIdentity.key(for: newURL)) { return }
         if PathRules.shouldIgnore(url: newURL, excluded: settingsStore.settings.excludedPaths) { return }
@@ -360,10 +441,23 @@ public final class RenameCoordinator: FileSystemMonitorDelegate {
         do {
             _ = try FileStability.waitUntilStable(url: newURL)
             if ignore.contains(url: newURL, key: try? FileIdentity.key(for: newURL)) { return }
-            guard TransformationParser.isConversionCandidate(oldName: oldURL.lastPathComponent, newName: newURL.lastPathComponent)
-                    || (try? TransformationParser.parseFilename(newURL.lastPathComponent)) != nil else { return }
+            // A new file (same URL twice) is checked for a wrong extension when that option is on.
+            // A rename counts only when the user changed the extension in place.
+            let isNewFile = oldURL.standardizedFileURL == newURL.standardizedFileURL
+            guard isNewFile || Self.isUserRename(from: oldURL, to: newURL) else { return }
+            guard isNewFile || TransformationParser.isConversionCandidate(oldName: oldURL.lastPathComponent, newName: newURL.lastPathComponent) else { return }
             let command = try TransformationParser.parseFilename(newURL.lastPathComponent)
-            let detected = try FormatDetector.detect(at: newURL)
+            let detected = try FormatDetector.detect(at: newURL, originalFilename: oldURL.lastPathComponent)
+            // Nothing to offer: .ipynb is JSON inside, .numbers is a ZIP, and so on. Asking to
+            // "convert" those would only end in an error, so the rename is left alone.
+            let convertible = command.outputs.contains { spec in
+                spec.format == .folder || spec.format == detected.id
+                    || FormatRegistry.canConvert(from: detected.id, to: spec.format)
+            }
+            guard convertible || command.opensSettings else {
+                AppLog.info("Left alone \(newURL.lastPathComponent): no conversion from \(detected.id.rawValue)")
+                return
+            }
             if command.outputs.count == 1,
                let only = command.outputs.first,
                only.format == detected.id,

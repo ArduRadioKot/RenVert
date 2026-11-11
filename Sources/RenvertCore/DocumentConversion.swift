@@ -16,6 +16,31 @@ public struct DocumentConverter: Converter {
             return
         }
 
+        if [.csv, .tsv, .xlsx].contains(detected), [.txt, .markdown].contains(spec.format) {
+            let rows = try SpreadsheetConverter().loadTable(source, format: detected)
+            let text = spec.format == .markdown ? Self.markdownTable(rows) : Self.plainTable(rows)
+            try text.write(to: destination, atomically: true, encoding: .utf8)
+            context.onProgress?(1)
+            return
+        }
+        if detected == .pdf, [.txt, .markdown, .docx, .rtf, .html, .doc, .odt].contains(spec.format),
+           try pdfText(source, spec: spec).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // A scan has no text layer; recognize the pages instead of writing an empty file.
+            var ocrSpec = spec
+            ocrSpec.format = [.txt, .markdown, .docx].contains(spec.format) ? spec.format : .txt
+            if ocrSpec.format == spec.format {
+                try IntelligenceConverter().convert(from: source, detected: detected, spec: spec, to: destination, context: context)
+                return
+            }
+            let recognized = destination.deletingLastPathComponent().appendingPathComponent(".renvert-ocr-\(UUID().uuidString).txt")
+            defer { try? FileManager.default.removeItem(at: recognized) }
+            try IntelligenceConverter().convert(from: source, detected: detected, spec: ocrSpec, to: recognized, context: context)
+            let text = try String(contentsOf: recognized, encoding: .utf8)
+            try writeAttributed(NSAttributedString(string: text, attributes: Self.bodyAttributes), spec: spec, to: destination)
+            context.onProgress?(1)
+            return
+        }
+
         let attributed = try loadAttributed(source, format: detected, spec: spec)
         context.onProgress?(0.4)
         try writeAttributed(attributed, spec: spec, to: destination)
@@ -25,15 +50,14 @@ public struct DocumentConverter: Converter {
     private func loadAttributed(_ url: URL, format: FormatID, spec: OutputSpec) throws -> NSAttributedString {
         switch format {
         case .txt, .markdown, .rst, .org, .adoc:
-            let text = try String(contentsOf: url, encoding: .utf8)
+            let text = DelimitedText.decode(try Data(contentsOf: url))
             return NSAttributedString(string: text, attributes: Self.bodyAttributes)
+        case .csv, .tsv, .xlsx:
+            let rows = try SpreadsheetConverter().loadTable(url, format: format)
+            return try Self.importHTML(Data(Self.htmlTable(rows).utf8))
         case .html:
             let data = try Data(contentsOf: url)
-            return try NSAttributedString(
-                data: data,
-                options: [.documentType: NSAttributedString.DocumentType.html],
-                documentAttributes: nil
-            )
+            return try Self.importHTML(data)
         case .rtf:
             let data = try Data(contentsOf: url)
             return try NSAttributedString(
@@ -47,14 +71,85 @@ public struct DocumentConverter: Converter {
                 options: [.documentType: NSAttributedString.DocumentType.rtfd],
                 documentAttributes: nil
             )
+        case .doc, .odt:
+            return try NSAttributedString(
+                url: url,
+                options: [.documentType: format == .doc
+                    ? NSAttributedString.DocumentType.docFormat
+                    : NSAttributedString.DocumentType.openDocument],
+                documentAttributes: nil
+            )
         case .docx:
+            // TextKit keeps headings, bold, lists and tables; the plain reader is the fallback.
+            if let rich = try? NSAttributedString(
+                url: url,
+                options: [.documentType: NSAttributedString.DocumentType.officeOpenXML],
+                documentAttributes: nil
+            ), rich.length > 0 {
+                return rich
+            }
             return NSAttributedString(string: try DocxIO.readText(url), attributes: Self.bodyAttributes)
         case .pdf:
             return NSAttributedString(string: try pdfText(url, spec: spec), attributes: Self.bodyAttributes)
         default:
-            let text = try String(contentsOf: url, encoding: .utf8)
+            let text = DelimitedText.decode(try Data(contentsOf: url))
             return NSAttributedString(string: text, attributes: Self.bodyAttributes)
         }
+    }
+
+    /// AppKit's HTML importer runs on WebKit and must be used on the main thread;
+    /// conversions run on a background queue.
+    private static func importHTML(_ data: Data) throws -> NSAttributedString {
+        func load() throws -> NSAttributedString {
+            // No encoding given: the importer honors the page's own charset declaration.
+            try NSAttributedString(
+                data: data,
+                options: [.documentType: NSAttributedString.DocumentType.html],
+                documentAttributes: nil
+            )
+        }
+        if Thread.isMainThread { return try load() }
+        var result: Result<NSAttributedString, Error>!
+        DispatchQueue.main.sync { result = Result { try load() } }
+        return try result.get()
+    }
+
+    private static func htmlTable(_ rows: [[String]]) -> String {
+        func cell(_ text: String, _ tag: String) -> String {
+            let escaped = DocxIO.xmlEscape(text).replacingOccurrences(of: "\n", with: "<br>")
+            // Short values stay on one line; otherwise a narrow column breaks them mid-word.
+            let wrap = text.count <= 24 ? " nowrap" : ""
+            return "<\(tag)\(wrap) style=\"border:1px solid #999;padding:3px 6px;\">\(escaped)</\(tag)>"
+        }
+        let body = rows.enumerated().map { index, row in
+            "<tr>" + row.map { cell($0, index == 0 ? "th" : "td") }.joined() + "</tr>"
+        }.joined(separator: "\n")
+        return """
+        <!DOCTYPE html><html><head><meta charset="utf-8"></head>
+        <body style="font-family:-apple-system,Helvetica,sans-serif;font-size:10pt;color:#000;">
+        <table width="100%" style="border-collapse:collapse;">
+        \(body)
+        </table></body></html>
+        """
+    }
+
+    private static func markdownTable(_ rows: [[String]]) -> String {
+        guard let header = rows.first else { return "" }
+        func line(_ row: [String]) -> String {
+            "| " + row.map { $0.replacingOccurrences(of: "|", with: "\\|").replacingOccurrences(of: "\n", with: " ") }.joined(separator: " | ") + " |"
+        }
+        return ([line(header), "|" + header.map { _ in " --- |" }.joined()] + rows.dropFirst().map(line)).joined(separator: "\n") + "\n"
+    }
+
+    /// Columns padded to a common width, so the table reads in any text editor.
+    private static func plainTable(_ rows: [[String]]) -> String {
+        let width = rows.map(\.count).max() ?? 0
+        let widths = (0..<width).map { column in rows.map { $0.count > column ? $0[column].count : 0 }.max() ?? 0 }
+        return rows.map { row in
+            row.enumerated().map { column, text in
+                column == row.count - 1 ? text : text.padding(toLength: widths[column], withPad: " ", startingAt: 0)
+            }.joined(separator: "  ").replacingOccurrences(of: "\n", with: " ")
+        }.joined(separator: "\n") + "\n"
     }
 
     private func writeAttributed(_ attributed: NSAttributedString, spec: OutputSpec, to url: URL) throws {
@@ -75,85 +170,127 @@ public struct DocumentConverter: Converter {
                 documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
             )
             try data.write(to: url)
+        case .doc, .odt:
+            let data = try attributed.data(
+                from: NSRange(location: 0, length: attributed.length),
+                documentAttributes: [.documentType: spec.format == .doc
+                    ? NSAttributedString.DocumentType.docFormat
+                    : NSAttributedString.DocumentType.openDocument]
+            )
+            try data.write(to: url)
         case .pdf:
             try writePDF(attributed, to: url)
         case .docx:
-            try DocxIO.write(text: attributed.string, to: url)
+            // TextKit writes styling and tables; the plain writer is the fallback.
+            if let data = try? attributed.data(
+                from: NSRange(location: 0, length: attributed.length),
+                documentAttributes: [.documentType: NSAttributedString.DocumentType.officeOpenXML]
+            ) {
+                try data.write(to: url)
+            } else {
+                try DocxIO.write(text: attributed.string, to: url)
+            }
         default:
             throw RenvertError.unsupportedConversion(from: "document", to: spec.format.rawValue)
         }
     }
 
     private func writePDF(_ attributed: NSAttributedString, to url: URL) throws {
-        let page = CGRect(x: 0, y: 0, width: 612, height: 792)
+        // The system paper size: A4 or Letter, whichever this Mac prints on.
+        var paper = NSPrintInfo.shared.paperSize
+        if paper.width <= 0 || paper.height <= 0 { paper = NSSize(width: 595, height: 842) }
+        let page = CGRect(origin: .zero, size: paper)
+        let margin: CGFloat = 54
         let storage = NSTextStorage(attributedString: attributed)
         let layout = NSLayoutManager()
         storage.addLayoutManager(layout)
         var offset = 0
         let data = NSMutableData()
         guard let consumer = CGDataConsumer(data: data as CFMutableData) else {
-            throw RenvertError.converterFailed(String(localized: "PDF consumer failed."))
+            throw RenvertError.converterFailed(L("PDF consumer failed."))
         }
         var media = page
         guard let ctx = CGContext(consumer: consumer, mediaBox: &media, nil) else {
-            throw RenvertError.converterFailed(String(localized: "PDF context failed."))
+            throw RenvertError.converterFailed(L("PDF context failed."))
         }
-        let nsctx = NSGraphicsContext(cgContext: ctx, flipped: false)
+        // Flipped, so lines run top to bottom and the text starts at the top of the page.
+        let nsctx = NSGraphicsContext(cgContext: ctx, flipped: true)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = nsctx
-        while offset < layout.numberOfGlyphs {
-            let container = NSTextContainer(size: CGSize(width: page.width - 72, height: page.height - 72))
-            layout.addTextContainer(container)
-            ctx.beginPDFPage(nil)
-            ctx.saveGState()
-            ctx.translateBy(x: 36, y: 36)
-            layout.drawGlyphs(forGlyphRange: layout.glyphRange(for: container), at: .zero)
-            ctx.restoreGState()
-            ctx.endPDFPage()
-            offset = NSMaxRange(layout.glyphRange(for: container))
+        // Paper is white whatever the system appearance is. Under Dark Mode dynamic colors
+        // would otherwise resolve to white text on a white page.
+        NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {
+            repeat {
+                let container = NSTextContainer(size: CGSize(width: page.width - margin * 2, height: page.height - margin * 2))
+                layout.addTextContainer(container)
+                let range = layout.glyphRange(for: container)
+                ctx.beginPDFPage(nil)
+                ctx.saveGState()
+                ctx.translateBy(x: 0, y: page.height)
+                ctx.scaleBy(x: 1, y: -1)
+                let origin = CGPoint(x: margin, y: margin)
+                layout.drawBackground(forGlyphRange: range, at: origin)
+                layout.drawGlyphs(forGlyphRange: range, at: origin)
+                ctx.restoreGState()
+                ctx.endPDFPage()
+                // A container that takes no glyphs (an oversized attachment) must not loop forever.
+                if range.length == 0 { break }
+                offset = NSMaxRange(range)
+            } while offset < layout.numberOfGlyphs
         }
         NSGraphicsContext.restoreGraphicsState()
         ctx.closePDF()
         try (data as Data).write(to: url)
     }
 
+    /// Renders pages to images: 200 dpi unless `+dpi` says otherwise, on white, cropped and
+    /// rotated the way a PDF viewer shows them. Without `+page` every page is rendered; the
+    /// first goes to `destination` and the rest are handed to the engine as extra files.
     private func renderPDFPage(_ url: URL, spec: OutputSpec, to destination: URL, context: ConversionContext) throws {
         guard let document = PDFDocument(url: url), document.pageCount > 0 else {
-            throw RenvertError.invalidInput(String(localized: "PDF could not be opened."))
+            throw RenvertError.invalidInput(L("PDF could not be opened."))
         }
-        let pageIndex: Int
-        if case .single(let page) = spec.pages() {
-            pageIndex = max(0, page - 1)
-        } else {
-            pageIndex = 0
+        var indices = spec.pages().map { resolvePages($0, count: document.pageCount) } ?? Array(0..<document.pageCount)
+        if indices.isEmpty { indices = [0] }
+        if context.extraOutputs == nil { indices = [indices[0]] }
+        let utType = ImageIOSupport.utType(for: spec.format) ?? .png
+        let scale = CGFloat(spec.dpi() ?? 200) / 72.0
+
+        for (position, index) in indices.enumerated() {
+            try context.cancellation.throwIfCancelled()
+            guard let page = document.page(at: index) else {
+                throw RenvertError.invalidInput(L("PDF page is missing."))
+            }
+            var bounds = page.bounds(for: .cropBox)
+            if page.rotation % 180 != 0 {
+                bounds.size = CGSize(width: bounds.height, height: bounds.width)
+            }
+            let size = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+            let image = ImageRaster.bitmap(pixelSize: size) { rect in
+                guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+                ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+                ctx.fill(rect)
+                ctx.saveGState()
+                ctx.scaleBy(x: scale, y: scale)
+                // PDFKit applies the page's rotation and crop box origin itself.
+                page.draw(with: .cropBox, to: ctx)
+                ctx.restoreGState()
+            }
+            let target: URL
+            if position == 0 {
+                target = destination
+            } else {
+                target = destination.deletingLastPathComponent()
+                    .appendingPathComponent(".renvert-\(UUID().uuidString).\(destination.pathExtension)")
+                context.extraOutputs?.add(target)
+            }
+            try ImageConverter().writeImage(image, to: target, utType: utType, spec: spec, settings: context.settings)
+            context.onProgress?(Double(position + 1) / Double(indices.count))
         }
-        guard let page = document.page(at: min(pageIndex, document.pageCount - 1)) else {
-            throw RenvertError.invalidInput(String(localized: "PDF page is missing."))
-        }
-        let dpi = spec.dpi() ?? 144
-        let bounds = page.bounds(for: .mediaBox)
-        let scale = CGFloat(dpi) / 72.0
-        let size = CGSize(width: bounds.width * scale, height: bounds.height * scale)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        if let ctx = NSGraphicsContext.current?.cgContext {
-            ctx.saveGState()
-            ctx.scaleBy(x: scale, y: scale)
-            page.draw(with: .mediaBox, to: ctx)
-            ctx.restoreGState()
-        }
-        image.unlockFocus()
-        try ImageConverter().writeImage(
-            image,
-            to: destination,
-            utType: ImageIOSupport.utType(for: spec.format) ?? .png,
-            spec: spec,
-            settings: context.settings
-        )
     }
 
     private func pdfText(_ url: URL, spec: OutputSpec) throws -> String {
-        guard let document = PDFDocument(url: url) else { throw RenvertError.invalidInput(String(localized: "PDF could not be opened.")) }
+        guard let document = PDFDocument(url: url) else { throw RenvertError.invalidInput(L("PDF could not be opened.")) }
         var indices = Array(0..<document.pageCount)
         if let pages = spec.pages() {
             indices = resolvePages(pages, count: document.pageCount)
@@ -172,14 +309,15 @@ public struct DocumentConverter: Converter {
 
     private static let bodyAttributes: [NSAttributedString.Key: Any] = [
         .font: NSFont.systemFont(ofSize: 12),
-        .foregroundColor: NSColor.textColor
+        // Fixed black: documents are written for white paper, not for the app's appearance.
+        .foregroundColor: NSColor.black
     ]
 }
 
 enum DocxIO {
     static func readText(_ url: URL) throws -> String {
         let result = ProcessRunner.run(executable: "/usr/bin/unzip", arguments: ["-p", url.path, "word/document.xml"])
-        guard result.exitCode == 0 else { throw RenvertError.invalidInput(String(localized: "Not a readable DOCX file.")) }
+        guard result.exitCode == 0 else { throw RenvertError.invalidInput(L("Not a readable DOCX file.")) }
         return extractDocxText(result.stdout)
     }
 
@@ -223,7 +361,7 @@ enum DocxIO {
             executable: "/usr/bin/ditto",
             arguments: ["-c", "-k", "--norsrc", "--noextattr", temp.path, url.path]
         )
-        guard zip.exitCode == 0 else { throw RenvertError.converterFailed(String(localized: "Could not write DOCX.")) }
+        guard zip.exitCode == 0 else { throw RenvertError.converterFailed(L("Could not write DOCX.")) }
     }
 
     static func extractDocxText(_ xml: String) -> String {

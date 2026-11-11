@@ -7,17 +7,18 @@ struct MenuBarView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             header
-                .padding(.horizontal, 6)
+                .padding(.horizontal, MenuMetrics.inset)
                 .padding(.top, 4)
-                .padding(.bottom, 2)
 
             AccessWarning()
+                .padding(.horizontal, MenuMetrics.inset)
             ErrorBanner()
+                .padding(.horizontal, MenuMetrics.inset)
 
             if !model.activeTasks.isEmpty {
-                GlassModule(title: String(localized: "In progress")) {
+                MenuSection(title: L("In progress")) {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(model.activeTasks) { task in
                             HStack(spacing: 10) {
@@ -38,12 +39,12 @@ struct MenuBarView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 .buttonStyle(.plain)
-                                .help(String(localized: "Cancel"))
-                                .accessibilityLabel(String(localized: "Cancel"))
+                                .help(L("Cancel"))
+                                .accessibilityLabel(L("Cancel"))
                             }
                         }
                         if model.activeTasks.count > 1 {
-                            Button(String(localized: "Cancel All"), role: .destructive) { model.cancelAll() }
+                            Button(L("Cancel All"), role: .destructive) { model.cancelAll() }
                                 .glassButton()
                                 .controlSize(.small)
                         }
@@ -52,7 +53,7 @@ struct MenuBarView: View {
             }
 
             if let pending = model.pendingConfirmation {
-                GlassModule(title: String(localized: "Convert")) {
+                MenuSection(title: L("Convert")) {
                     HStack(spacing: 10) {
                         FormatBadge(text: pending.detected.id.rawValue)
                         VStack(alignment: .leading, spacing: 2) {
@@ -68,9 +69,9 @@ struct MenuBarView: View {
                     }
                     HStack(spacing: 8) {
                         Spacer(minLength: 0)
-                        Button(String(localized: "Skip")) { model.declinePending() }
+                        Button(L("Skip")) { model.declinePending() }
                             .glassButton()
-                        Button(String(localized: "Convert")) { model.confirmPending() }
+                        Button(L("Convert")) { model.confirmPending() }
                             .keyboardShortcut(.defaultAction)
                             .glassButton(prominent: true)
                     }
@@ -78,15 +79,18 @@ struct MenuBarView: View {
                 }
             }
 
-            GlassModule(title: String(localized: "Recent"), spacing: 4) {
+            MenuSection(title: L("Recent"), spacing: 2) {
                 recentList
             }
 
+            updateRow
+            Divider()
+                .padding(.horizontal, MenuMetrics.inset)
             footer
-                .padding(.top, 2)
         }
-        .padding(12)
-        .frame(width: 340)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 8)
+        .frame(width: 320)
         .onAppear {
             model.refreshQueue()
             model.refreshHistory()
@@ -103,7 +107,7 @@ struct MenuBarView: View {
                     Circle()
                         .fill(model.isMonitoring ? Color.green : Color.secondary.opacity(0.5))
                         .frame(width: 6, height: 6)
-                    Text(model.isMonitoring ? String(localized: "Watching folders") : String(localized: "Monitoring paused"))
+                    Text(model.isMonitoring ? L("Watching folders") : L("Monitoring paused"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -114,31 +118,59 @@ struct MenuBarView: View {
                 get: { model.isMonitoring },
                 set: { _ in model.toggleMonitoring() }
             )) {
-                Text(model.isMonitoring ? String(localized: "Pause Monitoring") : String(localized: "Resume Monitoring"))
+                Text(model.isMonitoring ? L("Pause Monitoring") : L("Resume Monitoring"))
             }
             .toggleStyle(.switch)
             .labelsHidden()
             .controlSize(.small)
-            .help(model.isMonitoring ? String(localized: "Pause Monitoring") : String(localized: "Resume Monitoring"))
+            .help(model.isMonitoring ? L("Pause Monitoring") : L("Resume Monitoring"))
+        }
+    }
+
+    @ViewBuilder
+    private var updateRow: some View {
+        switch model.updatePhase {
+        case .available(let update):
+            Button {
+                model.updates.install(update)
+            } label: {
+                Label(String(format: L("Update to %@"), update.version), systemImage: "arrow.down.circle")
+            }
+            .glassButton(prominent: true)
+            .controlSize(.large)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, MenuMetrics.inset)
+        case .downloading(let fraction):
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L("Downloading update…"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                ProgressView(value: fraction ?? 0)
+                    .progressViewStyle(.linear)
+            }
+            .padding(.horizontal, MenuMetrics.inset)
+        case .installing:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(L("Installing update…"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, MenuMetrics.inset)
+        default:
+            EmptyView()
         }
     }
 
     private var footer: some View {
-        HStack(spacing: 8) {
-            Button {
+        VStack(spacing: 0) {
+            MenuRow(title: L("Settings…"), shortcut: "⌘,") {
                 WindowRouter.showSettings()
-            } label: {
-                Label(String(localized: "Settings…"), systemImage: "gearshape")
             }
-            .glassButton()
-            Spacer(minLength: 8)
-            Button(String(localized: "Quit")) {
+            MenuRow(title: L("Quit Renvert"), shortcut: "⌘Q") {
                 model.quit()
             }
-            .glassButton()
-            .help(String(localized: "Quit Renvert"))
         }
-        .controlSize(.regular)
     }
 
     @ViewBuilder
@@ -149,7 +181,7 @@ struct MenuBarView: View {
                 Image(systemName: "tray")
                     .font(.system(size: 20, weight: .light))
                     .foregroundStyle(.tertiary)
-                Text(String(localized: "No recent conversions"))
+                Text(L("No recent conversions"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -179,17 +211,17 @@ struct MenuBarView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help(String(localized: "Show in Finder"))
+                        .help(L("Show in Finder"))
                         if record.succeeded && !record.undone {
-                            Button(String(localized: "Undo")) { model.undo(record) }
+                            Button(L("Undo")) { model.undo(record) }
                                 .glassButton()
                                 .controlSize(.small)
                         }
                     }
                     .modifier(HoverHighlight())
+                    .padding(.horizontal, -MenuMetrics.inset)
                 }
             }
-            .padding(.horizontal, -8)
         }
     }
 
@@ -230,5 +262,65 @@ struct FormatBadge: View {
             .foregroundStyle(.white)
             .frame(width: 34, height: 34)
             .background(Color.accentColor.gradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+}
+
+enum MenuMetrics {
+    /// Text inset from the panel edge, matching the hover highlight's own padding.
+    static let inset: CGFloat = 8
+}
+
+/// Menu section in the style of system menu bar extras: a small caption above flat rows.
+struct MenuSection<Content: View>: View {
+    let title: String
+    var spacing: CGFloat = 10
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: spacing) {
+                content()
+            }
+        }
+        .padding(.horizontal, MenuMetrics.inset)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A menu item row: full-width, highlighted while the pointer is over it.
+struct MenuRow: View {
+    let title: String
+    var shortcut: String?
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 13))
+                Spacer(minLength: 12)
+                if let shortcut {
+                    Text(shortcut)
+                        .font(.system(size: 13))
+                        .foregroundStyle(hovering ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.tertiary))
+                }
+            }
+            .foregroundStyle(hovering ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            .padding(.horizontal, MenuMetrics.inset)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(hovering ? Color.accentColor : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }

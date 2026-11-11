@@ -98,11 +98,17 @@ public enum FormatRegistry {
         case "webloc": return nil
         case "gz": return .gzip
         case "7zip": return .sevenZ
+        case "rar": return .cbr
+        case "tar.bz2": return .tbz2
+        case "tar.xz": return .txz
+        case "targa": return .tga
+        case "usd": return .usdc
         case "subrip": return .srt
         case "webvtt": return .vtt
         case "p12", "pfx": return nil
         case "folder": return .folder
-        default: return FormatID(rawValue: key)
+        default:
+            return all.first { $0.extensions.contains(key) }?.id
         }
     }
 
@@ -130,7 +136,7 @@ public enum FormatRegistry {
     public static func support(from: FormatID, to: FormatID) -> EncodeBackend {
         if to == .folder { return .native }
         if from == .folder {
-            return [.zip, .tgz, .tar, .cbz, .cbt].contains(to) ? .ditto : .unavailable
+            return archiveWritable.contains(to) ? .ditto : .unavailable
         }
 
         let src = descriptor(for: from)
@@ -139,11 +145,13 @@ public enum FormatRegistry {
         if src.category == .image && imageEncodable.contains(to) && imageDecodable.contains(from) {
             return dst.encode == .unavailable ? .unavailable : .native
         }
+        // A PDF is a document by category, but its pages render to any image format.
+        if from == .pdf && to != .pdf && imageEncodable.contains(to) { return .native }
         if src.category == .video && to == .gif { return .ffmpeg }
         if src.category == .video && imageEncodable.contains(to) { return .native }
         if src.category == .audio && videoContainers.contains(to) { return .ffmpeg }
         if (src.category == .audio || src.category == .video) && audioEncodable.contains(to) {
-            return nativeAudio.contains(to) && nativeAudio.contains(from) ? .native : .ffmpeg
+            return nativeAudioEncodable.contains(to) && nativeAudioDecodable.contains(from) ? .native : .ffmpeg
         }
         if (src.category == .audio || src.category == .video) && videoEncodable.contains(to) {
             return nativeVideo.contains(from) && nativeVideo.contains(to) ? .native : .ffmpeg
@@ -154,6 +162,7 @@ public enum FormatRegistry {
             if nativeDocuments.contains(from) && nativeDocuments.contains(to) { return .native }
             return .unavailable
         }
+        if [.csv, .tsv, .xlsx].contains(from) && nativeDocuments.contains(to) { return .native }
         if configFormats.contains(from) && (configFormats.contains(to) || tableFormats.contains(to)) {
             return .native
         }
@@ -161,9 +170,9 @@ public enum FormatRegistry {
             return nativeTables.contains(from) && nativeTables.contains(to) ? .native : .unavailable
         }
         if archiveFormats.contains(from) && archiveFormats.contains(to) {
-            return [.zip, .tar, .tgz, .cbz, .cbt].contains(from) && [.zip, .tar, .tgz, .cbz, .cbt].contains(to)
-                ? .ditto : .unavailable
+            return archiveReadable.contains(from) && archiveWritable.contains(to) ? .ditto : .unavailable
         }
+        if modelReadable.contains(from) && modelWritable.contains(to) { return .native }
         if (from == .der && to == .pem) || (from == .pem && to == .der) { return .native }
         return .unavailable
     }
@@ -173,28 +182,41 @@ public enum FormatRegistry {
     }
 }
 
-public let imageDecodable: Set<FormatID> = [
-    .avif, .bmp, .gif, .heic, .icns, .ico, .jpeg, .png, .svg, .svgz, .tiff, .webp, .pdf
-]
+/// Camera RAW formats ImageIO develops into a regular bitmap.
+public let rawImageFormats: Set<FormatID> = [.arw, .cr2, .cr3, .dng, .nef, .orf, .pef, .raf, .rw2, .sr2]
+public let imageDecodable: Set<FormatID> = rawImageFormats.union([
+    .apng, .avif, .bmp, .gif, .heic, .icns, .ico, .jpeg, .jxl, .png, .psd, .svg, .svgz, .tga, .tiff, .webp, .pdf
+])
 public let imageEncodable: Set<FormatID> = [
-    .avif, .bmp, .gif, .heic, .icns, .ico, .jpeg, .png, .tiff, .webp, .pdf
+    .avif, .bmp, .gif, .heic, .icns, .ico, .jpeg, .png, .psd, .tga, .tiff, .webp, .pdf
 ]
 public let nativeAudio: Set<FormatID> = [.aac, .aiff, .alac, .caf, .m4a, .wav]
+/// Core Audio reads MP3 and FLAC and writes FLAC, so these need no ffmpeg.
+public let nativeAudioDecodable: Set<FormatID> = nativeAudio.union([.mp3, .flac])
+public let nativeAudioEncodable: Set<FormatID> = nativeAudio.union([.flac])
 public let audioEncodable: Set<FormatID> = nativeAudio.union([.mp3, .flac, .ogg, .opus, .mka])
 public let nativeVideo: Set<FormatID> = [.mov, .mp4, .m4a]
 public let videoEncodable: Set<FormatID> = [.mov, .mp4, .mkv, .webm, .avi, .gif]
 public let videoContainers: Set<FormatID> = [.mov, .mp4, .mkv, .webm, .avi]
 public let subtitleFormats: Set<FormatID> = [.srt, .vtt, .ass, .ssa, .sub, .microdvd]
 public let documentLike: Set<FormatID> = [
-    .txt, .markdown, .html, .rtf, .rtfd, .pdf, .docx, .adoc, .rst, .org, .opml, .tex
+    .txt, .markdown, .html, .rtf, .rtfd, .pdf, .docx, .doc, .odt, .adoc, .rst, .org, .opml, .tex
 ]
-public let nativeDocuments: Set<FormatID> = [.txt, .markdown, .html, .rtf, .pdf, .docx]
+public let nativeDocuments: Set<FormatID> = [.txt, .markdown, .html, .rtf, .pdf, .docx, .doc, .odt]
 public let configFormats: Set<FormatID> = [.json, .yaml, .plist, .xml, .toml]
 public let tableFormats: Set<FormatID> = [.csv, .tsv, .xlsx, .json, .yaml]
 public let nativeTables: Set<FormatID> = [.csv, .tsv, .xlsx, .json, .yaml]
 public let archiveFormats: Set<FormatID> = [
-    .zip, .tar, .tgz, .tbz2, .txz, .tzst, .cbz, .cbt, .gzip, .bz2
+    .zip, .tar, .tgz, .tbz2, .txz, .tzst, .cbz, .cbt, .cbr, .sevenZ, .gzip, .bz2
 ]
+/// RAR (and CBR) can only be unpacked: the system libarchive has no RAR writer.
+public let archiveReadable: Set<FormatID> = [.zip, .tar, .tgz, .tbz2, .txz, .cbz, .cbt, .cbr, .sevenZ]
+public let archiveWritable: Set<FormatID> = [.zip, .tar, .tgz, .tbz2, .txz, .cbz, .cbt, .sevenZ]
+/// 3D formats Model I/O reads and writes. USDZ is read-only there.
+public let modelReadable: Set<FormatID> = [.obj, .stl, .ply, .usda, .usdc, .usdz]
+public let modelWritable: Set<FormatID> = [.obj, .stl, .ply, .usda, .usdc]
+/// Formats with no reliable signature: the name the file had before the rename decides.
+public let extensionOnlyFormats: Set<FormatID> = [.obj, .stl, .tga]
 
 private func makeAll() -> [FormatDescriptor] {
     func d(
@@ -225,20 +247,20 @@ private func makeAll() -> [FormatDescriptor] {
         d(.ico, .image, ["ico"], UTType("com.microsoft.ico"), decode: .native, encode: .native),
         d(.icon, .image, ["icon"], nil, decode: .unavailable, encode: .unavailable),
         d(.jpeg, .image, ["jpg", "jpeg"], .jpeg, decode: .native, encode: .native),
-        d(.jxl, .image, ["jxl"], UTType("public.jpeg-xl"), decode: .unavailable, encode: .unavailable, "Requires a JXL encoder that is not bundled yet."),
+        d(.jxl, .image, ["jxl"], UTType("public.jpeg-xl"), decode: .native, encode: .unavailable, "ImageIO reads JPEG XL but cannot write it."),
         d(.nef, .image, ["nef"], UTType("com.nikon.raw-image"), decode: .native, encode: .unavailable),
         d(.orf, .image, ["orf"], UTType("com.olympus.raw-image"), decode: .native, encode: .unavailable),
         d(.pcx, .image, ["pcx"], nil, decode: .unavailable, encode: .unavailable),
         d(.pef, .image, ["pef"], UTType("com.pentax.raw-image"), decode: .native, encode: .unavailable),
         d(.png, .image, ["png"], .png, decode: .native, encode: .native),
         d(.ps, .image, ["ps"], UTType("com.adobe.postscript"), decode: .unavailable, encode: .unavailable),
-        d(.psd, .image, ["psd"], UTType("com.adobe.photoshop-image"), decode: .native, encode: .unavailable),
+        d(.psd, .image, ["psd"], UTType("com.adobe.photoshop-image"), decode: .native, encode: .native, "Written as a flattened single layer."),
         d(.raf, .image, ["raf"], UTType("com.fuji.raw-image"), decode: .native, encode: .unavailable),
         d(.rw2, .image, ["rw2"], UTType("com.panasonic.raw-image"), decode: .native, encode: .unavailable),
         d(.sr2, .image, ["sr2"], UTType("com.sony.sr2-raw-image"), decode: .native, encode: .unavailable),
         d(.svg, .image, ["svg"], .svg, decode: .native, encode: .unavailable, "SVG is rasterized on decode."),
         d(.svgz, .image, ["svgz"], nil, decode: .native, encode: .unavailable),
-        d(.tga, .image, ["tga"], nil, decode: .unavailable, encode: .unavailable),
+        d(.tga, .image, ["tga"], UTType("com.truevision.tga-image"), decode: .native, encode: .native),
         d(.tiff, .image, ["tiff", "tif"], .tiff, decode: .native, encode: .native),
         d(.webp, .image, ["webp"], UTType("org.webmproject.webp"), decode: .native, encode: .native),
 
@@ -249,10 +271,10 @@ private func makeAll() -> [FormatDescriptor] {
         d(.au, .audio, ["au"], nil, decode: .ffmpeg, encode: .ffmpeg),
         d(.caf, .audio, ["caf"], UTType("com.apple.coreaudio-format"), decode: .native, encode: .native),
         d(.eac3, .audio, ["eac3"], nil, decode: .ffmpeg, encode: .ffmpeg),
-        d(.flac, .audio, ["flac"], UTType("org.xiph.flac"), decode: .ffmpeg, encode: .ffmpeg),
+        d(.flac, .audio, ["flac"], UTType("org.xiph.flac"), decode: .native, encode: .native),
         d(.m4a, .audio, ["m4a", "m4b"], .mpeg4Audio, decode: .native, encode: .native),
         d(.mka, .audio, ["mka"], nil, decode: .ffmpeg, encode: .ffmpeg),
-        d(.mp3, .audio, ["mp3"], .mp3, decode: .ffmpeg, encode: .ffmpeg),
+        d(.mp3, .audio, ["mp3"], .mp3, decode: .native, encode: .ffmpeg),
         d(.ogg, .audio, ["ogg", "oga"], UTType("org.xiph.ogg-audio"), decode: .ffmpeg, encode: .ffmpeg),
         d(.opus, .audio, ["opus"], nil, decode: .ffmpeg, encode: .ffmpeg),
         d(.tta, .audio, ["tta"], nil, decode: .ffmpeg, encode: .unavailable),
@@ -275,7 +297,7 @@ private func makeAll() -> [FormatDescriptor] {
         d(.wmv, .video, ["wmv"], nil, decode: .ffmpeg, encode: .unavailable),
 
         d(.adoc, .document, ["adoc", "asciidoc"], nil, decode: .unavailable, encode: .unavailable),
-        d(.doc, .document, ["doc"], .rtf, decode: .unavailable, encode: .unavailable, "Legacy DOC needs LibreOffice."),
+        d(.doc, .document, ["doc"], UTType("com.microsoft.word.doc"), decode: .native, encode: .native, "Text and basic styling through TextKit."),
         d(.dbk, .document, ["dbk"], nil, decode: .unavailable, encode: .unavailable),
         d(.docx, .document, ["docx"], UTType("org.openxmlformats.wordprocessingml.document"), decode: .native, encode: .native, "Native DOCX preserves paragraphs, not full layout."),
         d(.html, .document, ["html", "htm"], .html, decode: .native, encode: .native),
@@ -285,7 +307,7 @@ private func makeAll() -> [FormatDescriptor] {
         d(.man, .document, ["man"], nil, decode: .unavailable, encode: .unavailable),
         d(.markdown, .document, ["md", "markdown"], .plainText, decode: .native, encode: .native),
         d(.wiki, .document, ["wiki"], nil, decode: .unavailable, encode: .unavailable),
-        d(.odt, .document, ["odt"], nil, decode: .unavailable, encode: .unavailable),
+        d(.odt, .document, ["odt"], UTType("org.oasis-open.opendocument.text"), decode: .native, encode: .native, "Text and basic styling through TextKit."),
         d(.opml, .document, ["opml"], .xml, decode: .native, encode: .native),
         d(.org, .document, ["org"], .plainText, decode: .native, encode: .native),
         d(.pages, .document, ["pages"], nil, decode: .unavailable, encode: .unavailable),
@@ -319,16 +341,16 @@ private func makeAll() -> [FormatDescriptor] {
         d(.xls, .spreadsheet, ["xls"], nil, decode: .unavailable, encode: .unavailable),
         d(.xlsx, .spreadsheet, ["xlsx"], UTType("org.openxmlformats.spreadsheetml.sheet"), decode: .native, encode: .native),
 
-        d(.sevenZ, .archive, ["7z"], nil, decode: .unavailable, encode: .unavailable),
+        d(.sevenZ, .archive, ["7z"], nil, decode: .ditto, encode: .ditto),
         d(.bz2, .archive, ["bz2"], nil, decode: .unavailable, encode: .unavailable),
-        d(.cbr, .archive, ["cbr"], nil, decode: .unavailable, encode: .unavailable),
+        d(.cbr, .archive, ["cbr", "rar"], nil, decode: .ditto, encode: .unavailable),
         d(.cbt, .archive, ["cbt"], nil, decode: .ditto, encode: .ditto),
         d(.cbz, .archive, ["cbz"], nil, decode: .ditto, encode: .ditto),
         d(.gzip, .archive, ["gz", "gzip"], UTType("org.gnu.gnu-zip-archive"), decode: .ditto, encode: .ditto),
         d(.tar, .archive, ["tar"], UTType("public.tar-archive"), decode: .ditto, encode: .ditto),
-        d(.tbz2, .archive, ["tbz2", "tbz"], nil, decode: .unavailable, encode: .unavailable),
+        d(.tbz2, .archive, ["tbz2", "tbz"], nil, decode: .ditto, encode: .ditto),
         d(.tgz, .archive, ["tgz", "tar.gz"], UTType("org.gnu.gnu-zip-tar-archive"), decode: .ditto, encode: .ditto),
-        d(.txz, .archive, ["txz"], nil, decode: .unavailable, encode: .unavailable),
+        d(.txz, .archive, ["txz"], nil, decode: .ditto, encode: .ditto),
         d(.tzst, .archive, ["tzst"], nil, decode: .unavailable, encode: .unavailable),
         d(.xz, .archive, ["xz"], nil, decode: .unavailable, encode: .unavailable),
         d(.zip, .archive, ["zip"], .zip, decode: .ditto, encode: .ditto),
@@ -344,12 +366,12 @@ private func makeAll() -> [FormatDescriptor] {
         d(.fbx, .model, ["fbx"], nil, decode: .unavailable, encode: .unavailable),
         d(.glb, .model, ["glb"], nil, decode: .unavailable, encode: .unavailable),
         d(.gltf, .model, ["gltf"], nil, decode: .unavailable, encode: .unavailable),
-        d(.obj, .model, ["obj"], nil, decode: .unavailable, encode: .unavailable),
-        d(.ply, .model, ["ply"], nil, decode: .unavailable, encode: .unavailable),
-        d(.stl, .model, ["stl"], nil, decode: .unavailable, encode: .unavailable),
-        d(.usda, .model, ["usda"], nil, decode: .unavailable, encode: .unavailable),
-        d(.usdc, .model, ["usdc"], nil, decode: .unavailable, encode: .unavailable),
-        d(.usdz, .model, ["usdz"], UTType("com.pixar.universal-scene-description-mobile"), decode: .unavailable, encode: .unavailable),
+        d(.obj, .model, ["obj"], nil, decode: .native, encode: .native),
+        d(.ply, .model, ["ply"], nil, decode: .native, encode: .native),
+        d(.stl, .model, ["stl"], nil, decode: .native, encode: .native),
+        d(.usda, .model, ["usda"], nil, decode: .native, encode: .native),
+        d(.usdc, .model, ["usdc"], nil, decode: .native, encode: .native),
+        d(.usdz, .model, ["usdz"], UTType("com.pixar.universal-scene-description-mobile"), decode: .native, encode: .unavailable),
 
         d(.ass, .subtitle, ["ass"], nil, decode: .native, encode: .native),
         d(.microdvd, .subtitle, ["sub"], nil, decode: .native, encode: .native),

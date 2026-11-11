@@ -41,20 +41,34 @@ public struct IntelligenceConverter: Converter {
         context.onProgress?(1)
     }
 
+    /// Tells a PDF from an image by its bytes: after a rename the extension is the target's.
     private func rasterPages(_ source: URL, spec: OutputSpec) throws -> [NSImage] {
-        if source.pathExtension.lowercased() == "pdf", let document = PDFDocument(url: source) {
+        let head = (try? FileHandle(forReadingFrom: source)).flatMap { handle -> Data? in
+            defer { try? handle.close() }
+            return try? handle.read(upToCount: 5)
+        }
+        if head == Data("%PDF-".utf8), let document = PDFDocument(url: source) {
+            // 200 dpi on white: small print at 72 dpi is too coarse to recognize.
+            let scale: CGFloat = 200.0 / 72.0
             return (0..<document.pageCount).compactMap { index in
                 guard let page = document.page(at: index) else { return nil }
-                let bounds = page.bounds(for: .mediaBox)
-                let image = NSImage(size: bounds.size)
-                image.lockFocus()
-                page.draw(with: .mediaBox, to: NSGraphicsContext.current!.cgContext)
-                image.unlockFocus()
-                return image
+                var bounds = page.bounds(for: .cropBox)
+                if page.rotation % 180 != 0 { bounds.size = CGSize(width: bounds.height, height: bounds.width) }
+                let size = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+                return ImageRaster.bitmap(pixelSize: size) { rect in
+                    guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+                    ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+                    ctx.fill(rect)
+                    ctx.scaleBy(x: scale, y: scale)
+                    page.draw(with: .cropBox, to: ctx)
+                }
             }
         }
-        guard let image = NSImage(contentsOf: source) else {
-            throw RenvertError.invalidInput(String(localized: "OCR needs an image or PDF."))
+        if let cg = ImageRaster.cgImage(at: source) {
+            return [ImageRaster.image(from: cg)]
+        }
+        guard let data = try? Data(contentsOf: source), let image = NSImage(data: data) else {
+            throw RenvertError.invalidInput(L("OCR needs an image or PDF."))
         }
         _ = spec
         return [image]
@@ -62,7 +76,7 @@ public struct IntelligenceConverter: Converter {
 
     private func recognize(_ image: NSImage, spec: OutputSpec) throws -> (text: String, boxes: [(String, CGRect)]) {
         guard let tiff = image.tiffRepresentation, let ci = CIImage(data: tiff) else {
-            throw RenvertError.converterFailed(String(localized: "Could not read image for OCR."))
+            throw RenvertError.converterFailed(L("Could not read image for OCR."))
         }
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
@@ -83,11 +97,11 @@ public struct IntelligenceConverter: Converter {
 
     private func writeSearchablePDF(images: [NSImage], boxes: [(String, CGRect)], to url: URL) throws {
         let data = NSMutableData()
-        guard let first = images.first else { throw RenvertError.invalidInput(String(localized: "No pages to OCR.")) }
+        guard let first = images.first else { throw RenvertError.invalidInput(L("No pages to OCR.")) }
         var media = CGRect(origin: .zero, size: first.size)
         guard let consumer = CGDataConsumer(data: data),
               let ctx = CGContext(consumer: consumer, mediaBox: &media, nil) else {
-            throw RenvertError.converterFailed(String(localized: "Could not write searchable PDF."))
+            throw RenvertError.converterFailed(L("Could not write searchable PDF."))
         }
         for image in images {
             var box = CGRect(origin: .zero, size: image.size)
@@ -123,7 +137,7 @@ public struct IntelligenceConverter: Converter {
         let audioURL = try preparedAudio(source)
         let locale = locale(from: spec)
         guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
-            throw RenvertError.converterFailed(String(localized: "Speech recognizer is not available for \(locale.identifier)."))
+            throw RenvertError.converterFailed(L("Speech recognizer is not available for \(locale.identifier)."))
         }
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
         request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
@@ -297,7 +311,7 @@ public struct MiscConverter: Converter {
                 .replacingOccurrences(of: "-----END CERTIFICATE-----", with: "")
                 .filter { !$0.isWhitespace }
             guard let der = Data(base64Encoded: body) else {
-                throw RenvertError.invalidInput(String(localized: "PEM body is not valid Base64."))
+                throw RenvertError.invalidInput(L("PEM body is not valid Base64."))
             }
             try der.write(to: destination)
         }

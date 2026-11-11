@@ -11,12 +11,12 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .general: String(localized: "General")
-        case .folders: String(localized: "Folders")
-        case .conversions: String(localized: "Conversions")
-        case .performance: String(localized: "Performance")
-        case .history: String(localized: "History")
-        case .about: String(localized: "About")
+        case .general: L("General")
+        case .folders: L("Folders")
+        case .conversions: L("Conversions")
+        case .performance: L("Performance")
+        case .history: L("History")
+        case .about: L("About")
         }
     }
 
@@ -57,38 +57,6 @@ struct SidebarIcon: View {
     }
 }
 
-/// System Settings–style sidebar row with its own selection highlight.
-struct SidebarRow: View {
-    let item: SettingsSection
-    let isSelected: Bool
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                SidebarIcon(symbol: item.symbol, tint: item.tint)
-                Text(item.title)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? AnyShapeStyle(Color.accentColor.opacity(0.85))
-                                     : AnyShapeStyle(Color.primary.opacity(hovering ? 0.06 : 0)))
-            )
-            .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @State private var selection: SettingsSection? = .general
@@ -97,7 +65,17 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView {
-            sidebar
+            List(SettingsSection.allCases, selection: $selection) { item in
+                Label {
+                    Text(item.title)
+                } icon: {
+                    SidebarIcon(symbol: item.symbol, tint: item.tint)
+                }
+                .tag(item)
+            }
+            .listStyle(.sidebar)
+            .toolbar(removing: .sidebarToggle)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 215, max: 280)
         } detail: {
             // A List or Table in the detail reports a huge ideal height. NavigationSplitView
             // then lays itself out at that height and the window shows an empty slice.
@@ -109,57 +87,11 @@ struct SettingsView: View {
                             .padding(.horizontal, 20)
                             .padding(.top, 12)
                     }
-                    .navigationTitle(section.title)
             }
+            .navigationTitle(section.title)
         }
-        .toolbar(removing: .sidebarToggle)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(minWidth: 720, minHeight: 480)
-        .environmentObject(model)
-    }
-
-    private var sidebar: some View {
-        // Plain buttons instead of a selectable List: the List's outline view never receives
-        // clicks inside the window's glass host, so rows could not be selected.
-        ScrollView {
-            VStack(spacing: 2) {
-                ForEach(SettingsSection.allCases) { item in
-                    SidebarRow(item: item, isSelected: item == section) {
-                        selection = item
-                    }
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-        }
-        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            HStack(spacing: 10) {
-                BrandMark(size: 30)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Renvert")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text(model.isMonitoring ? String(localized: "Watching folders") : String(localized: "Monitoring paused"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 6)
-        }
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                Button(String(localized: "Quit")) {
-                    model.quit()
-                }
-                .glassButton()
-                .help(String(localized: "Quit Renvert"))
-                Spacer(minLength: 0)
-            }
-            .padding(12)
-        }
     }
 
     @ViewBuilder
@@ -180,28 +112,21 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
-            Toggle(String(localized: "Launch at login"), isOn: binding(\.launchAtLogin))
-            Toggle(String(localized: "Watch folders"), isOn: binding(\.monitoringEnabled))
-            Picker(String(localized: "When a conversion is detected"), selection: binding(\.confirmationMode)) {
-                Text(String(localized: "Convert automatically")).tag(ConfirmationMode.automatic)
-                Text(String(localized: "Ask first")).tag(ConfirmationMode.askFirst)
+            Toggle(L("Launch at login"), isOn: binding(\.launchAtLogin))
+            Toggle(L("Watch folders"), isOn: binding(\.monitoringEnabled))
+            Picker(L("When a conversion is detected"), selection: binding(\.confirmationMode)) {
+                Text(L("Convert automatically")).tag(ConfirmationMode.automatic)
+                Text(L("Ask first")).tag(ConfirmationMode.askFirst)
             }
-            Toggle(String(localized: "Notifications"), isOn: binding(\.notificationsEnabled))
-            Picker(String(localized: "Language"), selection: binding(\.language)) {
-                Text(String(localized: "System")).tag(AppLanguage.system)
+            Toggle(L("Notifications"), isOn: binding(\.notificationsEnabled))
+            Picker(L("Language"), selection: binding(\.language)) {
+                Text(L("System")).tag(AppLanguage.system)
                 Text("English").tag(AppLanguage.english)
                 Text("Русский").tag(AppLanguage.russian)
-            }
-            if model.needsRelaunchForLanguage {
-                LabeledContent(String(localized: "The new language applies after a relaunch.")) {
-                    Button(String(localized: "Relaunch")) { model.relaunch() }
-                        .glassButton(prominent: true)
-                }
             }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-        .padding(8)
     }
 
     private func binding<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
@@ -218,87 +143,37 @@ struct FolderSettingsView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            AccessWarning()
-            Text(String(localized: "Renvert only watches these folders. Drag more in, or grant access when macOS asks."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            List {
-                ForEach(model.settings.folders) { folder in
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: FileManager.default.fileExists(atPath: folder.path) ? "folder" : "exclamationmark.triangle")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 18, height: 18)
-                            .padding(.top, 2)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(URL(fileURLWithPath: folder.path).lastPathComponent)
-                                .lineLimit(1)
-                            Text(folder.path)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Toggle(String(localized: "Recursive"), isOn: Binding(
-                                get: { folder.recursive },
-                                set: { value in
-                                    model.updateSettings { settings in
-                                        if let index = settings.folders.firstIndex(of: folder) {
-                                            settings.folders[index].recursive = value
-                                        }
-                                    }
-                                }
-                            ))
-                            .toggleStyle(.checkbox)
-                            .controlSize(.small)
-                        }
-                        Spacer(minLength: 16)
-                        Toggle(String(localized: "Enabled"), isOn: Binding(
-                            get: { folder.enabled },
-                            set: { value in
-                                model.updateSettings { settings in
-                                    if let index = settings.folders.firstIndex(of: folder) {
-                                        settings.folders[index].enabled = value
-                                    }
-                                }
-                            }
-                        ))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                        .controlSize(.small)
-                        .fixedSize()
-                        Button {
-                            model.removeFolder(folder)
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.system(size: 15))
-                                .symbolRenderingMode(.hierarchical)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help(String(localized: "Remove Folder"))
-                        .accessibilityLabel(String(localized: "Remove Folder"))
-                    }
-                    .padding(.vertical, 4)
-                }
-                .onDelete { offsets in
-                    model.updateSettings { $0.folders.remove(atOffsets: offsets) }
+        Form {
+            if !model.blockedFolders.isEmpty {
+                Section {
+                    AccessWarning()
+                        .listRowInsets(EdgeInsets())
                 }
             }
-            .listStyle(.inset)
-            .scrollContentBackground(.hidden)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Button(String(localized: "Add Folder…")) { pickFolder() }
-                    .glassButton()
-                Toggle(String(localized: "Watch external volumes when they appear"), isOn: Binding(
+            Section {
+                ForEach(model.settings.folders) { folder in
+                    FolderRow(folder: folder)
+                }
+                HStack {
+                    Spacer(minLength: 0)
+                    Button(L("Add Folder…")) { pickFolder() }
+                        .glassButton()
+                }
+            } footer: {
+                Text(L("Renvert only watches these folders. Drag more in, or grant access when macOS asks."))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Section {
+                Toggle(L("Watch external volumes when they appear"), isOn: Binding(
                     get: { model.settings.watchExternalVolumes },
                     set: { value in model.updateSettings { $0.watchExternalVolumes = value } }
                 ))
             }
         }
-        .padding(20)
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             for provider in providers {
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
@@ -322,6 +197,74 @@ struct FolderSettingsView: View {
     }
 }
 
+private struct FolderRow: View {
+    @EnvironmentObject private var model: AppModel
+    let folder: WatchedFolder
+
+    private var exists: Bool { FileManager.default.fileExists(atPath: folder.path) }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Group {
+                if exists {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: folder.path))
+                        .resizable()
+                } else {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(.yellow)
+                        .padding(4)
+                }
+            }
+            .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(URL(fileURLWithPath: folder.path).lastPathComponent)
+                    .lineLimit(1)
+                Text((folder.path as NSString).abbreviatingWithTildeInPath)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 12)
+            Toggle(L("Recursive"), isOn: binding(\.recursive))
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .fixedSize()
+            Toggle(L("Enabled"), isOn: binding(\.enabled))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+            Button {
+                model.removeFolder(folder)
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .font(.system(size: 15))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(L("Remove Folder"))
+            .accessibilityLabel(L("Remove Folder"))
+        }
+    }
+
+    private func binding(_ keyPath: WritableKeyPath<WatchedFolder, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { folder[keyPath: keyPath] },
+            set: { value in
+                model.updateSettings { settings in
+                    if let index = settings.folders.firstIndex(where: { $0.id == folder.id }) {
+                        settings.folders[index][keyPath: keyPath] = value
+                    }
+                }
+            }
+        )
+    }
+}
+
 struct ConversionSettingsView: View {
     @EnvironmentObject private var model: AppModel
 
@@ -331,30 +274,29 @@ struct ConversionSettingsView: View {
                 get: { model.settings.conversion.jpegQuality },
                 set: { value in model.updateSettings { $0.conversion.jpegQuality = value } }
             ), in: 0.3...1) {
-                Text(String(localized: "JPEG quality"))
+                Text(L("JPEG quality"))
             }
             Slider(value: Binding(
                 get: { model.settings.conversion.webpQuality },
                 set: { value in model.updateSettings { $0.conversion.webpQuality = value } }
             ), in: 0.3...1) {
-                Text(String(localized: "WebP quality"))
+                Text(L("WebP quality"))
             }
-            Toggle(String(localized: "Preserve metadata when the format allows it"), isOn: Binding(
+            Toggle(L("Preserve metadata when the format allows it"), isOn: Binding(
                 get: { model.settings.conversion.preserveMetadata },
                 set: { value in model.updateSettings { $0.conversion.preserveMetadata = value } }
             ))
-            Toggle(String(localized: "Use hardware acceleration"), isOn: Binding(
+            Toggle(L("Use hardware acceleration"), isOn: Binding(
                 get: { model.settings.conversion.hardwareAcceleration },
                 set: { value in model.updateSettings { $0.conversion.hardwareAcceleration = value } }
             ))
-            Toggle(String(localized: "Offer to convert new files whose extension does not match their contents"), isOn: Binding(
+            Toggle(L("Offer to convert new files whose extension does not match their contents"), isOn: Binding(
                 get: { model.settings.conversion.convertMismatchedNewFiles },
                 set: { value in model.updateSettings { $0.conversion.convertMismatchedNewFiles = value } }
             ))
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-        .padding(8)
     }
 }
 
@@ -363,22 +305,21 @@ struct PerformanceSettingsView: View {
 
     var body: some View {
         Form {
-            Picker(String(localized: "Load"), selection: Binding(
+            Picker(L("Load"), selection: Binding(
                 get: { model.settings.performance },
                 set: { value in model.updateSettings { $0.performance = value } }
             )) {
-                Text(String(localized: "Low")).tag(PerformanceProfile.low)
-                Text(String(localized: "Medium")).tag(PerformanceProfile.medium)
-                Text(String(localized: "High")).tag(PerformanceProfile.high)
+                Text(L("Low")).tag(PerformanceProfile.low)
+                Text(L("Medium")).tag(PerformanceProfile.medium)
+                Text(L("High")).tag(PerformanceProfile.high)
             }
-            LabeledContent(String(localized: "Parallel conversions"), value: "\(model.settings.performance.maxConcurrentTasks)")
-            Text(String(localized: "Temporary files are written on the same volume as the destination so replacements stay atomic."))
+            LabeledContent(L("Parallel conversions"), value: "\(model.settings.performance.maxConcurrentTasks)")
+            Text(L("Temporary files are written on the same volume as the destination so replacements stay atomic."))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-        .padding(8)
     }
 }
 
@@ -392,11 +333,11 @@ struct HistorySettingsView: View {
                     get: { model.settings.backups.retainDays },
                     set: { value in model.updateSettings { $0.backups.retainDays = value } }
                 ), in: 1...365) {
-                    Text(String(localized: "Keep backups for \(model.settings.backups.retainDays) days"))
+                    Text(L("Keep backups for \(model.settings.backups.retainDays) days"))
                         .lineLimit(1)
                 }
                 Spacer(minLength: 12)
-                Button(String(localized: "Clear History")) {
+                Button(L("Clear History")) {
                     model.coordinator.history.clear()
                     model.refreshHistory()
                 }
@@ -404,38 +345,42 @@ struct HistorySettingsView: View {
                 .fixedSize()
             }
             Table(model.history) {
-                TableColumn(String(localized: "When")) { record in
-                    Text(record.createdAt.formatted(date: .abbreviated, time: .shortened))
+                TableColumn(L("When")) { record in
+                    Text(record.createdAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(Localization.locale)))
                         .lineLimit(1)
                 }
-                .width(min: 120, ideal: 140)
-                TableColumn(String(localized: "Source")) { record in
+                .width(min: 100, ideal: 120)
+                TableColumn(L("Source")) { record in
                     Text(URL(fileURLWithPath: record.sourcePath).lastPathComponent)
                         .lineLimit(1)
                 }
-                TableColumn(String(localized: "Result")) { record in
+                .width(min: 80, ideal: 130)
+                TableColumn(L("Result")) { record in
                     Text(record.error ?? record.targetFormats.joined(separator: ", "))
                         .lineLimit(1)
                 }
-                TableColumn(String(localized: "Size")) { record in
+                .width(min: 80, ideal: 130)
+                TableColumn(L("Size")) { record in
                     Text(ByteCountFormatter.string(fromByteCount: record.resultBytes, countStyle: .file))
                         .lineLimit(1)
                 }
-                .width(min: 72, ideal: 88)
+                .width(min: 56, ideal: 70)
                 TableColumn("") { record in
                     HStack(spacing: 8) {
-                        Button(String(localized: "Show")) {
+                        Button(L("Show")) {
                             model.reveal(record.destinationPaths.first ?? record.sourcePath)
                         }
                         .fixedSize()
                         if record.succeeded && !record.undone {
-                            Button(String(localized: "Undo")) { model.undo(record) }
+                            Button(L("Undo")) { model.undo(record) }
                                 .fixedSize()
                         }
                     }
                 }
-                .width(min: 132, ideal: 148)
+                .width(min: 110, ideal: 120)
             }
+            .tableStyle(.bordered)
+            .scrollContentBackground(.hidden)
         }
         .padding(20)
         .onAppear { model.refreshHistory() }
@@ -443,25 +388,94 @@ struct HistorySettingsView: View {
 }
 
 struct AboutSettingsView: View {
+    @EnvironmentObject private var model: AppModel
+
+    private var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
+
+    private var updateStatus: String {
+        switch model.updatePhase {
+        case .idle:
+            return L("Updates come from GitHub releases.")
+        case .checking:
+            return L("Checking for updates…")
+        case .upToDate:
+            return L("Renvert is up to date.")
+        case .nonePublished:
+            return L("No GitHub releases yet.")
+        case .available(let update):
+            return String(format: L("Renvert %@ is available"), update.version)
+        case .downloading:
+            return L("Downloading update…")
+        case .installing:
+            return L("Installing update…")
+        case .failed(let message):
+            return message
+        }
+    }
+
+    private var updateBusy: Bool {
+        switch model.updatePhase {
+        case .checking, .downloading, .installing: return true
+        default: return false
+        }
+    }
+
     var body: some View {
         VStack(spacing: 14) {
             BrandMark(size: 96)
                 .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
             Text("Renvert")
                 .font(.system(size: 26, weight: .bold))
-            Text(String(localized: "A native macOS rename-to-convert utility. Files never leave this Mac."))
+            Text(L("A native macOS rename-to-convert utility. Files never leave this Mac."))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 400)
-            Text(String(localized: "Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")"))
+            Text(String(format: L("Version %@"), version))
                 .font(.callout)
                 .foregroundStyle(.secondary)
             VStack(spacing: 4) {
-                Text(String(localized: "Authors: FrogeeSoft"))
+                Text(L("Authors: FrogeeSoft"))
                     .font(.system(size: 13, weight: .semibold))
                 Text("© 2026 FrogeeSoft")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+            }
+            .padding(.top, 8)
+
+            VStack(spacing: 10) {
+                Text(updateStatus)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                if case .downloading(let fraction) = model.updatePhase {
+                    ProgressView(value: fraction ?? 0)
+                        .progressViewStyle(.linear)
+                        .frame(maxWidth: 280)
+                }
+                HStack(spacing: 8) {
+                    Button(L("Check for Updates…")) {
+                        model.updates.check(userInitiated: true)
+                    }
+                    .glassButton()
+                    .disabled(updateBusy)
+                    if case .available(let update) = model.updatePhase {
+                        Button(L("Install Update")) {
+                            model.updates.install(update)
+                        }
+                        .keyboardShortcut(.defaultAction)
+                        .glassButton(prominent: true)
+                    }
+                }
+                .controlSize(.regular)
+                Toggle(L("Check for updates automatically"), isOn: Binding(
+                    get: { model.updates.automatic },
+                    set: { model.updates.automatic = $0 }
+                ))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
             }
             .padding(.top, 8)
         }

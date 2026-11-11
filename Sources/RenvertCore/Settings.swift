@@ -98,7 +98,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         launchAtLogin: Bool = false,
         confirmationMode: ConfirmationMode = .askFirst,
         notificationsEnabled: Bool = true,
-        language: AppLanguage = .english,
+        language: AppLanguage = .system,
         folders: [WatchedFolder] = AppSettings.defaultFolders(),
         excludedPaths: [String] = [],
         watchExternalVolumes: Bool = false,

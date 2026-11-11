@@ -19,36 +19,45 @@ public enum ConfigValue: Equatable, Sendable {
     }
 
     public static func load(from url: URL) throws -> ConfigValue {
-        let ext = url.pathExtension.lowercased()
+        try load(from: url, format: FormatRegistry.resolve(url.pathExtension))
+    }
+
+    /// `format` is what the bytes are. After a rename the extension is the target's, so it
+    /// must not decide how the file is parsed.
+    public static func load(from url: URL, format: FormatID?) throws -> ConfigValue {
         let data = try Data(contentsOf: url)
-        switch ext {
-        case "json":
-            return try fromJSON(JSONSerialization.jsonObject(with: data))
-        case "plist":
+        switch format {
+        case .json:
+            return try fromJSON(JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]))
+        case .plist:
             return try fromJSON(PropertyListSerialization.propertyList(from: data, options: [], format: nil))
-        case "xml":
+        case .xml:
             if let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) {
                 return try fromJSON(plist)
             }
             return try XMLBridge.parse(data)
-        case "yaml", "yml":
-            return try YAMLBridge.parse(String(contentsOf: url, encoding: .utf8))
-        case "toml":
-            return try TOMLBridge.parse(String(contentsOf: url, encoding: .utf8))
+        case .yaml:
+            return try YAMLBridge.parse(DelimitedText.decode(data))
+        case .toml:
+            return try TOMLBridge.parse(DelimitedText.decode(data))
         default:
-            if let json = try? JSONSerialization.jsonObject(with: data) {
+            if let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
                 return try fromJSON(json)
             }
-            throw RenvertError.invalidInput(String(localized: "Unsupported config file."))
+            throw RenvertError.invalidInput(L("Unsupported config file."))
         }
     }
 
     public static func dump(_ value: ConfigValue, format: FormatID) throws -> Data {
         switch format {
         case .json:
-            return try JSONSerialization.data(withJSONObject: value.jsonObject(), options: [.prettyPrinted, .sortedKeys])
+            return try JSONSerialization.data(
+                withJSONObject: value.jsonObject(),
+                options: [.prettyPrinted, .sortedKeys, .fragmentsAllowed, .withoutEscapingSlashes]
+            )
         case .plist:
-            return try PropertyListSerialization.data(fromPropertyList: value.jsonObject(), format: .xml, options: 0)
+            // Property lists have no null; an empty string is the closest value that survives.
+            return try PropertyListSerialization.data(fromPropertyList: value.replacingNulls().jsonObject(), format: .xml, options: 0)
         case .xml:
             return try XMLBridge.dump(value)
         case .yaml:
@@ -107,7 +116,16 @@ public enum ConfigValue: Equatable, Sendable {
             for (key, raw) in value { obj[key] = try fromJSON(raw) }
             return .object(obj)
         default:
-            throw RenvertError.invalidInput(String(localized: "Unsupported JSON value."))
+            throw RenvertError.invalidInput(L("Unsupported JSON value."))
+        }
+    }
+
+    func replacingNulls() -> ConfigValue {
+        switch self {
+        case .null: return .string("")
+        case .array(let items): return .array(items.map { $0.replacingNulls() })
+        case .object(let object): return .object(object.mapValues { $0.replacingNulls() })
+        default: return self
         }
     }
 
@@ -134,7 +152,7 @@ public struct ConfigConverter: Converter {
     public init() {}
 
     public func convert(from source: URL, detected: FormatID, spec: OutputSpec, to destination: URL, context: ConversionContext) throws {
-        let value = try ConfigValue.load(from: source)
+        let value = try ConfigValue.load(from: source, format: detected)
         context.onProgress?(0.5)
         if tableFormats.contains(spec.format) && spec.format != .json && spec.format != .yaml {
             try SpreadsheetConverter().convert(from: source, detected: detected, spec: spec, to: destination, context: context)
@@ -246,57 +264,178 @@ enum YAMLBridge {
 }
 
 enum TOMLBridge {
+    /// Keys, `[tables]` (dotted names nest), `[[arrays of tables]]`, strings, numbers,
+    /// booleans and one-line arrays.
     static func parse(_ text: String) throws -> ConfigValue {
-        var object: [String: ConfigValue] = [:]
-        var current = ""
+        var root: [String: ConfigValue] = [:]
+        var path: [String] = []
+        var arrayTable = false
         for raw in text.split(whereSeparator: \.isNewline) {
-            let line = String(raw).trimmingCharacters(in: .whitespaces)
-            if line.isEmpty || line.hasPrefix("#") { continue }
+            let line = stripComment(String(raw)).trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { continue }
+            if line.hasPrefix("[[") && line.hasSuffix("]]") {
+                path = splitKey(String(line.dropFirst(2).dropLast(2)))
+                arrayTable = true
+                root = appending(.object([:]), to: root, at: path)
+                continue
+            }
             if line.hasPrefix("[") && line.hasSuffix("]") {
-                current = String(line.dropFirst().dropLast())
-                if object[current] == nil { object[current] = .object([:]) }
+                path = splitKey(String(line.dropFirst().dropLast()))
+                arrayTable = false
+                root = setting(nil, in: root, at: path, lastOfArray: false)
                 continue
             }
             let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
             guard parts.count == 2 else { continue }
-            let value = scalar(parts[1])
-            if current.isEmpty {
-                object[parts[0]] = value
-            } else if case .object(var nested) = object[current] {
-                nested[parts[0]] = value
-                object[current] = .object(nested)
-            }
+            root = setting(scalar(parts[1]), in: root, at: path + splitKey(parts[0]), lastOfArray: arrayTable, tableDepth: path.count)
         }
-        return .object(object)
+        return .object(root)
+    }
+
+    private static func stripComment(_ line: String) -> String {
+        var quoted = false
+        for (offset, char) in line.enumerated() {
+            if char == "\"" { quoted.toggle() }
+            if char == "#" && !quoted { return String(line.prefix(offset)) }
+        }
+        return line
+    }
+
+    private static func splitKey(_ key: String) -> [String] {
+        key.split(separator: ".").map { part in
+            let name = part.trimmingCharacters(in: .whitespaces)
+            return name.hasPrefix("\"") && name.hasSuffix("\"") && name.count >= 2 ? String(name.dropFirst().dropLast()) : name
+        }
+    }
+
+    /// Sets `value` at `path`, creating tables on the way. Inside a `[[table]]` the path
+    /// runs through the last element of that array. A nil value only makes sure the table exists.
+    private static func setting(
+        _ value: ConfigValue?, in table: [String: ConfigValue], at path: [String], lastOfArray: Bool, tableDepth: Int = 0
+    ) -> [String: ConfigValue] {
+        guard let head = path.first else { return table }
+        var table = table
+        let rest = Array(path.dropFirst())
+        if rest.isEmpty {
+            if let value { table[head] = value } else if table[head] == nil { table[head] = .object([:]) }
+            return table
+        }
+        switch table[head] {
+        case .array(var items) where !items.isEmpty:
+            if case .object(let last) = items[items.count - 1] {
+                items[items.count - 1] = .object(setting(value, in: last, at: rest, lastOfArray: lastOfArray, tableDepth: tableDepth - 1))
+            }
+            table[head] = .array(items)
+        case .object(let nested):
+            table[head] = .object(setting(value, in: nested, at: rest, lastOfArray: lastOfArray, tableDepth: tableDepth - 1))
+        default:
+            table[head] = .object(setting(value, in: [:], at: rest, lastOfArray: lastOfArray, tableDepth: tableDepth - 1))
+        }
+        return table
+    }
+
+    private static func appending(_ value: ConfigValue, to table: [String: ConfigValue], at path: [String]) -> [String: ConfigValue] {
+        guard let head = path.first else { return table }
+        var table = table
+        let rest = Array(path.dropFirst())
+        if rest.isEmpty {
+            if case .array(let items) = table[head] { table[head] = .array(items + [value]) } else { table[head] = .array([value]) }
+            return table
+        }
+        switch table[head] {
+        case .array(var items) where !items.isEmpty:
+            if case .object(let last) = items[items.count - 1] {
+                items[items.count - 1] = .object(appending(value, to: last, at: rest))
+            }
+            table[head] = .array(items)
+        case .object(let nested):
+            table[head] = .object(appending(value, to: nested, at: rest))
+        default:
+            table[head] = .object(appending(value, to: [:], at: rest))
+        }
+        return table
     }
 
     static func dump(_ value: ConfigValue) -> String {
-        guard case .object(let object) = value else { return "" }
+        // TOML's root is always a table: a bare list or scalar gets a key to live under.
+        let root: [String: ConfigValue]
+        switch value {
+        case .object(let object): root = object
+        case .array: root = ["items": value]
+        default: root = ["value": value]
+        }
         var lines: [String] = []
-        var tables: [(String, [String: ConfigValue])] = []
-        for key in object.keys.sorted() {
-            switch object[key] {
-            case .object(let nested):
-                tables.append((key, nested))
+        writeTable(root, path: [], into: &lines)
+        return lines.joined(separator: "\n").trimmingCharacters(in: .newlines) + "\n"
+    }
+
+    /// Plain keys first, then `[table]` sections and `[[array of tables]]`, as TOML requires.
+    private static func writeTable(_ table: [String: ConfigValue], path: [String], into lines: inout [String]) {
+        var sections: [(String, ConfigValue)] = []
+        for key in table.keys.sorted() {
+            let value = table[key] ?? .null
+            switch value {
+            case .object:
+                sections.append((key, value))
+            case .array(let items) where !items.isEmpty && items.allSatisfy({ if case .object = $0 { return true }; return false }):
+                sections.append((key, value))
             default:
-                lines.append("\(key) = \(literal(object[key] ?? .null))")
+                lines.append("\(keyName(key)) = \(literal(value))")
             }
         }
-        for (name, nested) in tables {
-            lines.append("")
-            lines.append("[\(name)]")
-            for key in nested.keys.sorted() {
-                lines.append("\(key) = \(literal(nested[key] ?? .null))")
+        for (key, value) in sections {
+            let name = (path + [key]).map(keyName).joined(separator: ".")
+            switch value {
+            case .object(let nested):
+                lines.append("")
+                lines.append("[\(name)]")
+                writeTable(nested, path: path + [key], into: &lines)
+            case .array(let items):
+                for case .object(let nested) in items {
+                    lines.append("")
+                    lines.append("[[\(name)]]")
+                    writeTable(nested, path: path + [key], into: &lines)
+                }
+            default:
+                break
             }
         }
-        return lines.joined(separator: "\n") + "\n"
+    }
+
+    private static func keyName(_ key: String) -> String {
+        key.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil ? key : quoted(key)
+    }
+
+    private static func quoted(_ text: String) -> String {
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        return "\"\(escaped)\""
     }
 
     private static func scalar(_ raw: String) -> ConfigValue {
         if raw == "true" { return .bool(true) }
         if raw == "false" { return .bool(false) }
         if let number = Double(raw) { return .number(number) }
-        if raw.hasPrefix("\""), raw.hasSuffix("\"") { return .string(String(raw.dropFirst().dropLast())) }
+        if raw.hasPrefix("\""), raw.hasSuffix("\""), raw.count >= 2 {
+            return .string(String(raw.dropFirst().dropLast())
+                .replacingOccurrences(of: "\\\"", with: "\"")
+                .replacingOccurrences(of: "\\n", with: "\n")
+                .replacingOccurrences(of: "\\\\", with: "\\"))
+        }
+        if raw.hasPrefix("'"), raw.hasSuffix("'"), raw.count >= 2 { return .string(String(raw.dropFirst().dropLast())) }
+        if raw.hasPrefix("["), raw.hasSuffix("]") {
+            var items: [String] = []
+            var field = ""
+            var quoted = false
+            for char in raw.dropFirst().dropLast() {
+                if char == "\"" { quoted.toggle() }
+                if char == "," && !quoted { items.append(field); field = "" } else { field.append(char) }
+            }
+            items.append(field)
+            return .array(items.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map(scalar))
+        }
         return .string(raw)
     }
 
@@ -304,7 +443,8 @@ enum TOMLBridge {
         switch value {
         case .bool(let v): return v ? "true" : "false"
         case .number(let v): return v.rounded() == v ? String(Int(v)) : String(v)
-        case .string(let v): return "\"\(v)\""
+        case .string(let v): return quoted(v)
+        case .array(let items): return "[" + items.map(literal).joined(separator: ", ") + "]"
         default: return "\"\""
         }
     }
@@ -343,7 +483,7 @@ final class SimpleXML: NSObject, XMLParserDelegate {
     func parse(_ data: Data) throws -> ConfigValue {
         let parser = XMLParser(data: data)
         parser.delegate = self
-        guard parser.parse() else { throw RenvertError.invalidInput(String(localized: "XML parse failed.")) }
+        guard parser.parse() else { throw RenvertError.invalidInput(L("XML parse failed.")) }
         return root
     }
 
@@ -367,6 +507,13 @@ final class SimpleXML: NSObject, XMLParserDelegate {
         }
         if stack.isEmpty {
             root = .object([elementName: value])
+        } else if let existing = stack[stack.count - 1].children[elementName] {
+            // Repeated siblings (<item>…</item><item>…</item>) are a list, not one overwritten value.
+            if case .array(let items) = existing {
+                stack[stack.count - 1].children[elementName] = .array(items + [value])
+            } else {
+                stack[stack.count - 1].children[elementName] = .array([existing, value])
+            }
         } else {
             stack[stack.count - 1].children[elementName] = value
         }
