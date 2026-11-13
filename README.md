@@ -43,6 +43,17 @@ The Release script signs ad-hoc (`-`) and can copy a local `ffmpeg` into the bun
 ./scripts/package-dmg.sh
 ```
 
+For a GitHub release, build from the exact release tag; the version is picked
+up automatically. You can also set it explicitly:
+
+```bash
+VERSION=1.2.0 ./scripts/build.sh
+./scripts/package-dmg.sh
+```
+
+The updater rejects a DMG whose embedded app version is lower than the
+published release version.
+
 ## Use
 
 1. Launch Renvert. It lives in the menu bar (no Dock icon).

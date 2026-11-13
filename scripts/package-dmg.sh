@@ -9,6 +9,10 @@ if [[ ! -d "$APP/Contents/MacOS" ]]; then
 fi
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+if [[ ! "$VERSION" =~ '^[0-9]+(\.[0-9]+){1,2}$' ]]; then
+  echo "App has an invalid release version: $VERSION" >&2
+  exit 1
+fi
 DMG="$ROOT/dist/Renvert-${VERSION}.dmg"
 VOL="Renvert"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/renvert-dmg.XXXXXX")"

@@ -6,6 +6,20 @@ python3 "$ROOT/scripts/generate_xcodeproj.py"
 
 DEST="${1:-$ROOT/dist/Renvert.app}"
 mkdir -p "$(dirname "$DEST")"
+VERSION="${VERSION:-}"
+
+if [[ -z "$VERSION" ]]; then
+  RELEASE_TAG="$(git describe --exact-match --tags 2>/dev/null || true)"
+  if [[ "$RELEASE_TAG" =~ '^[vV][0-9]+(\.[0-9]+){1,2}$' ]]; then
+    VERSION="${RELEASE_TAG#v}"
+    VERSION="${VERSION#V}"
+  fi
+fi
+
+if [[ -n "$VERSION" && ! "$VERSION" =~ '^[0-9]+(\.[0-9]+){1,2}$' ]]; then
+  echo "VERSION must be a stable numeric version such as 1.2.0: $VERSION" >&2
+  exit 1
+fi
 
 # Prefer a real Xcode .app when the generated project builds.
 if xcodebuild \
@@ -32,6 +46,11 @@ else
   cp "$BIN" "$DEST/Contents/MacOS/Renvert"
   cp "$ROOT/Sources/Renvert/Info.plist" "$DEST/Contents/Info.plist"
   echo -n 'APPL????' > "$DEST/Contents/PkgInfo"
+fi
+
+if [[ -n "$VERSION" ]]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$DEST/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$DEST/Contents/Info.plist"
 fi
 
 if [[ -x /opt/homebrew/bin/ffmpeg ]]; then
