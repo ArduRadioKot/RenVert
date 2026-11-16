@@ -92,6 +92,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var performance: PerformanceProfile
     public var backups: BackupPolicy
     public var hasCompletedOnboarding: Bool
+    /// Format ids the user turned off. A rename that uses one of them is left alone.
+    public var disabledFormats: [String]
 
     public init(
         monitoringEnabled: Bool = true,
@@ -105,7 +107,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         conversion: ConversionDefaults = ConversionDefaults(),
         performance: PerformanceProfile = .medium,
         backups: BackupPolicy = BackupPolicy(),
-        hasCompletedOnboarding: Bool = false
+        hasCompletedOnboarding: Bool = false,
+        disabledFormats: [String] = []
     ) {
         self.monitoringEnabled = monitoringEnabled
         self.launchAtLogin = launchAtLogin
@@ -119,6 +122,60 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.performance = performance
         self.backups = backups
         self.hasCompletedOnboarding = hasCompletedOnboarding
+        self.disabledFormats = disabledFormats
+    }
+
+    public func allowsFormat(_ id: FormatID) -> Bool {
+        !disabledFormats.contains(id.rawValue)
+    }
+
+    public mutating func setFormat(_ id: FormatID, enabled: Bool) {
+        if enabled {
+            disabledFormats.removeAll { $0 == id.rawValue }
+        } else if !disabledFormats.contains(id.rawValue) {
+            disabledFormats.append(id.rawValue)
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case monitoringEnabled, launchAtLogin, confirmationMode, notificationsEnabled, language
+        case folders, excludedPaths, watchExternalVolumes, conversion, performance, backups
+        case hasCompletedOnboarding, disabledFormats
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AppSettings()
+        monitoringEnabled = try container.decodeIfPresent(Bool.self, forKey: .monitoringEnabled) ?? defaults.monitoringEnabled
+        launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? defaults.launchAtLogin
+        confirmationMode = try container.decodeIfPresent(ConfirmationMode.self, forKey: .confirmationMode) ?? defaults.confirmationMode
+        notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? defaults.notificationsEnabled
+        language = try container.decodeIfPresent(AppLanguage.self, forKey: .language) ?? defaults.language
+        folders = try container.decodeIfPresent([WatchedFolder].self, forKey: .folders) ?? defaults.folders
+        excludedPaths = try container.decodeIfPresent([String].self, forKey: .excludedPaths) ?? defaults.excludedPaths
+        watchExternalVolumes = try container.decodeIfPresent(Bool.self, forKey: .watchExternalVolumes) ?? defaults.watchExternalVolumes
+        conversion = try container.decodeIfPresent(ConversionDefaults.self, forKey: .conversion) ?? defaults.conversion
+        performance = try container.decodeIfPresent(PerformanceProfile.self, forKey: .performance) ?? defaults.performance
+        backups = try container.decodeIfPresent(BackupPolicy.self, forKey: .backups) ?? defaults.backups
+        hasCompletedOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding) ?? defaults.hasCompletedOnboarding
+        disabledFormats = try container.decodeIfPresent([String].self, forKey: .disabledFormats) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(monitoringEnabled, forKey: .monitoringEnabled)
+        try container.encode(launchAtLogin, forKey: .launchAtLogin)
+        try container.encode(confirmationMode, forKey: .confirmationMode)
+        try container.encode(notificationsEnabled, forKey: .notificationsEnabled)
+        try container.encode(language, forKey: .language)
+        try container.encode(folders, forKey: .folders)
+        try container.encode(excludedPaths, forKey: .excludedPaths)
+        try container.encode(watchExternalVolumes, forKey: .watchExternalVolumes)
+        try container.encode(conversion, forKey: .conversion)
+        try container.encode(performance, forKey: .performance)
+        try container.encode(backups, forKey: .backups)
+        try container.encode(hasCompletedOnboarding, forKey: .hasCompletedOnboarding)
+        try container.encode(disabledFormats, forKey: .disabledFormats)
     }
 
     public static func defaultFolders() -> [WatchedFolder] {

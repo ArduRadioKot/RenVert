@@ -1534,6 +1534,171 @@
           }
         }
       }
+    },
+    "Formats": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Форматы" } }
+      }
+    },
+    "Search formats": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Найти формат" } }
+      }
+    },
+    "Enable all": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Включить все" } }
+      }
+    },
+    "Turn all off": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Выключить все" } }
+      }
+    },
+    "Turn on": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Включить" } }
+      }
+    },
+    "Turn off": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Выключить" } }
+      }
+    },
+    "Turn a format off and Renvert will ignore it when you rename a file.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Выключите формат, и Renvert не будет конвертировать его при переименовании." } }
+      }
+    },
+    "“%@” is turned off in Settings.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "«%@» выключен в настройках." } }
+      }
+    },
+    "Images": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Изображения" } }
+      }
+    },
+    "Audio": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Аудио" } }
+      }
+    },
+    "Video": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Видео" } }
+      }
+    },
+    "Mail": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Почта" } }
+      }
+    },
+    "Spreadsheets": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Таблицы" } }
+      }
+    },
+    "Config": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Конфигурация" } }
+      }
+    },
+    "Tracks": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Треки" } }
+      }
+    },
+    "Archives": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Архивы" } }
+      }
+    },
+    "Fonts": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Шрифты" } }
+      }
+    },
+    "3D models": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "3D-модели" } }
+      }
+    },
+    "Subtitles": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Субтитры" } }
+      }
+    },
+    "Certificates": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Сертификаты" } }
+      }
+    },
+    "Folder": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Папка" } }
+      }
+    },
+    "E-books": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Книги" } }
+      }
+    },
+    "No link was found.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Ссылка не найдена." } }
+      }
+    },
+    "No feed items were found.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "В ленте нет записей." } }
+      }
+    },
+    "The feed could not be read.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось прочитать ленту." } }
+      }
+    },
+    "No playlist entries were found.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "В плейлисте нет записей." } }
+      }
+    },
+    "Palettes": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Палитры" } }
+      }
+    },
+    "No bibliography entries were found.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "В библиографии нет записей." } }
+      }
+    },
+    "No directory entries were found.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "В каталоге нет записей." } }
+      }
+    },
+    "No colors were found.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Цвета не найдены." } }
+      }
+    },
+    "The archive has no files.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "В архиве нет файлов." } }
+      }
+    },
+    "The archive has too many files.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "В архиве слишком много файлов." } }
+      }
+    },
+    "A file in the archive is larger than 4 GB.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Файл в архиве больше 4 ГБ." } }
+      }
     }
   },
   "version": "1.0"

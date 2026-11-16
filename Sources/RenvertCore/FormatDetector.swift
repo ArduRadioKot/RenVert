@@ -22,6 +22,9 @@ public enum FormatDetector {
         if isDir.boolValue {
             return DetectedFormat(id: .folder, confidence: 1, via: "directory")
         }
+        if url.pathExtension.lowercased() == "clr" {
+            return DetectedFormat(id: .clr, confidence: 0.75, via: "extension")
+        }
 
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
@@ -88,10 +91,15 @@ public enum FormatDetector {
     public static func refine(_ detected: DetectedFormat, originalFilename: String) -> DetectedFormat {
         let ext = URL(fileURLWithPath: originalFilename).pathExtension
         guard let hinted = FormatRegistry.resolve(ext), hinted != detected.id else { return detected }
+        if hinted == .webloc, detected.id == .plist || detected.id == .xml || detected.id == .txt {
+            return DetectedFormat(id: .webloc, confidence: 0.85, via: "original-extension")
+        }
         guard detected.confidence <= 0.6 || detected.id == .txt || detected.id == .xml else { return detected }
         let textish: Set<FormatID> = [
-            .txt, .markdown, .html, .xml, .csv, .tsv, .yaml, .toml, .json,
-            .srt, .vtt, .rtf, .adoc, .rst, .org, .plist
+            .txt, .markdown, .html, .xml, .csv, .tsv, .yaml, .toml, .json, .jsonl,
+            .srt, .vtt, .lrc, .sbv, .smi, .rtf, .adoc, .rst, .org, .plist, .gpx, .kml, .geojson, .tcx,
+            .nmea, .igc, .vcf, .ics, .eml, .opml, .b64, .ini, .env, .properties, .strings, .url, .rss, .atom, .m3u,
+            .cue, .bib, .ldif, .gpl, .hex, .css, .clr
         ]
         guard textish.contains(hinted), textish.contains(detected.id) else { return detected }
         if detected.via == "json" || detected.via == "plist" { return detected }
@@ -106,6 +114,12 @@ public enum FormatDetector {
         }
         if has([0xFF, 0xD8, 0xFF]) { return .jpeg }
         if has([0x89, 0x50, 0x4E, 0x47]) { return .png }
+        if has([0x00, 0x00, 0x00, 0x0C, 0x6A, 0x50, 0x20, 0x20]) { return .jp2 }
+        if has([0x76, 0x2F, 0x31, 0x01]) { return .exr }
+        if has([0x13, 0xAB, 0xA1, 0x5C]) { return .astc }
+        if has([0x53, 0x51, 0x4C, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6F, 0x72, 0x6D, 0x61, 0x74, 0x20, 0x33]) { return .sqlite }
+        if has([0x00, 0x01, 0x00, 0x00]) { return .ttf }
+        if has([0x4F, 0x54, 0x54, 0x4F]) { return .otf }
         if has([0x47, 0x49, 0x46, 0x38]) { return .gif }
         if has([0x42, 0x4D]) { return .bmp }
         // RAW containers that borrow the TIFF header come first.
@@ -157,6 +171,11 @@ public enum FormatDetector {
            ascii.contains("-----BEGIN") {
             return .pem
         }
+        // Netpbm is "P3\n" or "P6 32 32". A regex on the newline never matches here.
+        if bytes.count >= 3, bytes[0] == 0x50, (0x31...0x36).contains(bytes[1]),
+           bytes[2] == 0x0A || bytes[2] == 0x0D || bytes[2] == 0x20 || bytes[2] == 0x09 {
+            return .ppm
+        }
         return nil
     }
 
@@ -201,6 +220,11 @@ public enum FormatDetector {
             }
             if names.contains("META-INF/container.xml") { return .epub }
             if names.contains("content.opf") { return .epub }
+            let files = names.filter { !$0.hasSuffix("/") && !$0.hasPrefix("__MACOSX") }
+            let hasCheckpoint = files.contains { $0 == "data.pkl" || $0.hasSuffix("/data.pkl") }
+            let hasByteOrder = files.contains { $0 == "byteorder" || $0.hasSuffix("/byteorder") }
+            if hasCheckpoint && hasByteOrder { return .pt }
+            if !files.isEmpty, files.allSatisfy({ $0.lowercased().hasSuffix(".npy") }) { return .npz }
         } catch {
             return .zip
         }
@@ -222,10 +246,55 @@ public enum FormatDetector {
         }
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("\u{feff}") { trimmed.removeFirst() }
+        if trimmed.uppercased().hasPrefix("BEGIN:VCARD") {
+            return DetectedFormat(id: .vcf, confidence: 0.9, via: "vcard")
+        }
+        if trimmed.uppercased().contains("BEGIN:VCALENDAR") || trimmed.uppercased().contains("BEGIN:VEVENT") {
+            return DetectedFormat(id: .ics, confidence: 0.85, via: "ics")
+        }
+        if looksLikeEmail(trimmed) {
+            return DetectedFormat(id: .eml, confidence: 0.8, via: "email")
+        }
+        if looksLikeStrings(trimmed) {
+            return DetectedFormat(id: .strings, confidence: 0.85, via: "strings")
+        }
+        if trimmed.hasPrefix("#EXTM3U") {
+            return DetectedFormat(id: .m3u, confidence: 0.9, via: "m3u")
+        }
+        if looksLikeLRC(trimmed) {
+            return DetectedFormat(id: .lrc, confidence: 0.8, via: "lrc")
+        }
+        if trimmed.hasPrefix("GIMP Palette") {
+            return DetectedFormat(id: .gpl, confidence: 0.95, via: "gpl")
+        }
+        if looksLikeLDIF(trimmed) {
+            return DetectedFormat(id: .ldif, confidence: 0.85, via: "ldif")
+        }
+        if looksLikeBib(trimmed) {
+            return DetectedFormat(id: .bib, confidence: 0.85, via: "bib")
+        }
+        if looksLikeCue(trimmed) {
+            return DetectedFormat(id: .cue, confidence: 0.85, via: "cue")
+        }
+        if looksLikeNMEA(trimmed) {
+            return DetectedFormat(id: .nmea, confidence: 0.9, via: "nmea")
+        }
+        if looksLikeIGC(trimmed) {
+            return DetectedFormat(id: .igc, confidence: 0.9, via: "igc")
+        }
+        if looksLikeSBV(trimmed) {
+            return DetectedFormat(id: .sbv, confidence: 0.85, via: "sbv")
+        }
         if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") {
-            if (try? JSONSerialization.jsonObject(with: Data(trimmed.utf8))) != nil {
+            if let object = try? JSONSerialization.jsonObject(with: Data(trimmed.utf8)) {
+                if looksLikeGeoJSON(object) {
+                    return DetectedFormat(id: .geojson, confidence: 0.9, via: "geojson")
+                }
                 return DetectedFormat(id: .json, confidence: 0.85, via: "json")
             }
+        }
+        if looksLikeJSONL(trimmed) {
+            return DetectedFormat(id: .jsonl, confidence: 0.8, via: "jsonl")
         }
         if looksLikeHTML(trimmed) {
             return DetectedFormat(id: .html, confidence: 0.8, via: "html")
@@ -233,7 +302,37 @@ public enum FormatDetector {
         if trimmed.hasPrefix("<?xml") || trimmed.hasPrefix("<") {
             if trimmed.contains("<plist") { return DetectedFormat(id: .plist, confidence: 0.85, via: "plist") }
             if trimmed.contains("<svg") { return DetectedFormat(id: .svg, confidence: 0.85, via: "svg") }
+            let lower = trimmed.lowercased()
+            if lower.contains("<gpx") { return DetectedFormat(id: .gpx, confidence: 0.9, via: "gpx") }
+            if lower.contains("<kml") { return DetectedFormat(id: .kml, confidence: 0.9, via: "kml") }
+            if lower.contains("<opml") { return DetectedFormat(id: .opml, confidence: 0.9, via: "opml") }
+            if lower.contains("<rss") { return DetectedFormat(id: .rss, confidence: 0.9, via: "rss") }
+            if lower.contains("<feed") { return DetectedFormat(id: .atom, confidence: 0.85, via: "atom") }
+            if lower.contains("<trainingcenterdatabase") || lower.contains("<trackpoint") {
+                return DetectedFormat(id: .tcx, confidence: 0.9, via: "tcx")
+            }
+            if lower.contains("<sami") || (lower.contains("<sync") && lower.contains("start")) {
+                return DetectedFormat(id: .smi, confidence: 0.85, via: "sami")
+            }
             return DetectedFormat(id: .xml, confidence: 0.6, via: "xml")
+        }
+        if trimmed.lowercased().contains("[internetshortcut]") {
+            return DetectedFormat(id: .url, confidence: 0.9, via: "url")
+        }
+        if looksLikeINI(trimmed) {
+            return DetectedFormat(id: .ini, confidence: 0.75, via: "ini")
+        }
+        if looksLikeEnv(trimmed) {
+            return DetectedFormat(id: .env, confidence: 0.7, via: "env")
+        }
+        if looksLikeProperties(trimmed) {
+            return DetectedFormat(id: .properties, confidence: 0.6, via: "properties")
+        }
+        if looksLikeHex(trimmed) {
+            return DetectedFormat(id: .hex, confidence: 0.8, via: "hex")
+        }
+        if looksLikeCSS(trimmed) {
+            return DetectedFormat(id: .css, confidence: 0.75, via: "css")
         }
         let structured = trimmed.hasPrefix("{") || trimmed.hasPrefix("[")
         if !structured && looksLikeDelimited(trimmed, delimiter: ",") {
@@ -258,6 +357,118 @@ public enum FormatDetector {
             return DetectedFormat(id: .markdown, confidence: 0.6, via: "markdown")
         }
         return DetectedFormat(id: .txt, confidence: 0.3, via: "text")
+    }
+
+    private static func looksLikeEmail(_ text: String) -> Bool {
+        let head = text.prefix(800)
+        guard let blank = head.range(of: "\n\n") ?? head.range(of: "\r\n\r\n") else { return false }
+        let headers = head[..<blank.lowerBound].lowercased()
+        let known = ["from:", "subject:", "mime-version:", "received:", "return-path:", "to:", "date:"]
+        return known.filter { headers.contains($0) }.count >= 2
+    }
+
+    private static func looksLikeGeoJSON(_ object: Any) -> Bool {
+        guard let record = object as? [String: Any] else { return false }
+        let type = (record["type"] as? String)?.lowercased() ?? ""
+        let geo = ["featurecollection", "feature", "point", "linestring", "polygon", "multipoint", "multilinestring", "multipolygon", "geometrycollection"]
+        if geo.contains(type) && (record["coordinates"] != nil || record["features"] != nil || record["geometry"] != nil) {
+            return true
+        }
+        return record["features"] is [Any]
+    }
+
+    private static func looksLikeStrings(_ text: String) -> Bool {
+        let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let hits = lines.filter { $0.hasPrefix("\"") && $0.contains("=") && $0.hasSuffix(";") }
+        return !hits.isEmpty && hits.count * 2 >= lines.count
+    }
+
+    private static func looksLikeLRC(_ text: String) -> Bool {
+        text.range(of: #"\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]"#, options: .regularExpression) != nil
+    }
+
+    private static func looksLikeINI(_ text: String) -> Bool {
+        if text.contains("[[") { return false }
+        let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+        let hasSection = lines.contains { $0.hasPrefix("[") && $0.hasSuffix("]") }
+        let hasAssignment = lines.contains { $0.contains("=") && !$0.hasPrefix("[") && !$0.contains("\"") }
+        return hasSection && hasAssignment
+    }
+
+    private static func looksLikeEnv(_ text: String) -> Bool {
+        let lines = text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+        guard !lines.isEmpty, !text.contains("[") else { return false }
+        return lines.allSatisfy { line in
+            var pair = line
+            if pair.hasPrefix("export ") { pair.removeFirst("export ".count) }
+            guard let eq = pair.firstIndex(of: "=") else { return false }
+            let key = pair[..<eq].trimmingCharacters(in: .whitespaces)
+            return key.range(of: #"^[A-Z_][A-Z0-9_]*$"#, options: .regularExpression) != nil
+        }
+    }
+
+    private static func looksLikeProperties(_ text: String) -> Bool {
+        let lines = text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") && !$0.hasPrefix("!") }
+        guard !lines.isEmpty, !text.contains("[") else { return false }
+        guard lines.allSatisfy({ $0.contains("=") }) else { return false }
+        return lines.contains { line in
+            line.split(separator: "=").first?.contains(".") == true
+        }
+    }
+
+    private static func looksLikeLDIF(_ text: String) -> Bool {
+        let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+        return lines.contains { $0.hasPrefix("dn:") }
+    }
+
+    private static func looksLikeBib(_ text: String) -> Bool {
+        text.range(of: #"@[A-Za-z]+\{"#, options: .regularExpression) != nil
+    }
+
+    private static func looksLikeCue(_ text: String) -> Bool {
+        let upper = text.uppercased()
+        return upper.contains("FILE ") && upper.contains("TRACK ") && upper.contains("INDEX ")
+    }
+
+    private static func looksLikeNMEA(_ text: String) -> Bool {
+        text.split(whereSeparator: \.isNewline).contains { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return trimmed.hasPrefix("$") && (trimmed.contains("GGA") || trimmed.contains("RMC") || trimmed.contains("GLL"))
+        }
+    }
+
+    private static func looksLikeIGC(_ text: String) -> Bool {
+        let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+        let fixes = lines.contains { $0.count >= 35 && $0.hasPrefix("B") }
+        let header = lines.contains { $0.hasPrefix("A") || $0.hasPrefix("HF") }
+        return fixes && header
+    }
+
+    private static func looksLikeSBV(_ text: String) -> Bool {
+        text.range(of: #"\d+:\d{2}:\d{2}\.\d{3},\d+:\d{2}:\d{2}\.\d{3}"#, options: .regularExpression) != nil
+    }
+
+    private static func looksLikeHex(_ text: String) -> Bool {
+        let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard lines.count >= 2 else { return false }
+        return lines.allSatisfy { $0.range(of: #"^#?[0-9A-Fa-f]{6}([ \t].*)?$"#, options: .regularExpression) != nil }
+    }
+
+    private static func looksLikeCSS(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains(":root") && lower.contains("--") && lower.contains("#")
+    }
+
+    private static func looksLikeJSONL(_ text: String) -> Bool {
+        let lines = text.split(whereSeparator: \.isNewline).map(String.init).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard lines.count >= 2 else { return false }
+        return lines.prefix(20).allSatisfy { line in
+            (try? JSONSerialization.jsonObject(with: Data(line.utf8))) != nil
+        }
     }
 
     private static func looksLikeHTML(_ text: String) -> Bool {

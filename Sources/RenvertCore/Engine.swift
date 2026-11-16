@@ -37,6 +37,9 @@ public final class ConversionEngine {
     public init() {}
 
     public func converter(for source: FormatID, target: FormatID) -> Converter? {
+        if BeyondConverter.handles(from: source, to: target) { return BeyondConverter() }
+        if source == .sqlite || target == .sqlite || source == .jsonl || target == .jsonl { return sheets }
+        if source == .eml || source == .emlx { return documents }
         if FormatRegistry.support(from: source, to: target) == .unavailable { return nil }
         let src = FormatRegistry.descriptor(for: source)
         let dst = FormatRegistry.descriptor(for: target)
@@ -70,6 +73,9 @@ public final class ConversionEngine {
         let recordID = pending.id
         let detected = try FormatDetector.detect(at: source, originalFilename: pending.originalName)
         try cancellation.throwIfCancelled()
+        guard settings.allowsFormat(detected.id) else {
+            throw RenvertError.formatDisabled(detected.id.rawValue)
+        }
 
         let sourceSize = (try? FileIdentity.record(for: source).size) ?? 0
         try DiskSpace.ensureFreeSpace(on: source, needed: max(sourceSize * 3, 1_000_000))
@@ -121,10 +127,14 @@ public final class ConversionEngine {
                     continue
                 }
 
-                guard FormatRegistry.canConvert(from: detected.id, to: spec.format) else {
+                guard settings.allowsFormat(spec.format) else {
+                    throw RenvertError.formatDisabled(spec.format.rawValue)
+                }
+                let qr = spec.hasQR && QRCode.canConvert(from: detected.id, to: spec.format)
+                guard qr || FormatRegistry.canConvert(from: detected.id, to: spec.format) else {
                     throw RenvertError.unsupportedConversion(from: detected.id.rawValue, to: spec.format.rawValue)
                 }
-                guard let converter = converter(for: detected.id, target: spec.format) else {
+                guard let converter = qr ? BeyondConverter() : converter(for: detected.id, target: spec.format) else {
                     throw RenvertError.unsupportedConversion(from: detected.id.rawValue, to: spec.format.rawValue)
                 }
 
@@ -274,7 +284,9 @@ public final class ConversionEngine {
             .m4a: [.m4a, .aac, .mp4],
             .aac: [.aac, .m4a, .mp4],
             .alac: [.alac, .m4a, .mp4],
-            .zip: [.zip, .docx, .xlsx, .pptx, .epub],
+            .zip: [.zip, .docx, .xlsx, .pptx, .epub, .npz, .pt],
+            .npz: [.npz, .zip],
+            .pt: [.pt, .zip],
             .docx: [.docx, .zip],
             .xlsx: [.xlsx, .zip],
             .pptx: [.pptx, .zip],
@@ -293,6 +305,37 @@ public final class ConversionEngine {
             .xml: [.xml, .html],
             .srt: [.srt, .txt, .vtt],
             .vtt: [.vtt, .txt, .srt],
+            .gpx: [.gpx, .xml],
+            .kml: [.kml, .xml],
+            .geojson: [.geojson, .json],
+            .jsonl: [.jsonl, .txt, .json],
+            .vcf: [.vcf, .txt],
+            .ics: [.ics, .txt],
+            .eml: [.eml, .txt],
+            .opml: [.opml, .xml],
+            .b64: [.b64, .txt],
+            .ini: [.ini, .txt],
+            .env: [.env, .txt],
+            .properties: [.properties, .txt],
+            .strings: [.strings, .txt],
+            .webloc: [.webloc, .plist, .xml],
+            .url: [.url, .txt, .ini],
+            .rss: [.rss, .xml],
+            .atom: [.atom, .xml],
+            .tcx: [.tcx, .xml],
+            .m3u: [.m3u, .txt],
+            .lrc: [.lrc, .txt, .srt],
+            .sbv: [.sbv, .txt, .srt],
+            .smi: [.smi, .xml, .txt],
+            .nmea: [.nmea, .txt],
+            .igc: [.igc, .txt],
+            .cue: [.cue, .txt],
+            .bib: [.bib, .txt],
+            .ldif: [.ldif, .txt],
+            .gpl: [.gpl, .txt],
+            .hex: [.hex, .txt],
+            .css: [.css, .txt],
+            .clr: [.clr],
             .webm: [.webm, .mkv],
             .mkv: [.mkv, .webm],
             .opus: [.opus, .ogg],
@@ -304,7 +347,9 @@ public final class ConversionEngine {
         // as .txt reads as CSV. Any text is acceptable where text was asked for.
         let textual: Set<FormatID> = [
             .txt, .markdown, .html, .xml, .csv, .tsv, .yaml, .toml, .json, .plist, .srt, .vtt,
-            .adoc, .rst, .org, .svg
+            .adoc, .rst, .org, .svg, .jsonl, .vcf, .ics, .eml, .opml, .b64, .gpx, .kml, .tcx,
+            .ini, .env, .properties, .strings, .url, .rss, .atom, .m3u, .lrc, .webloc,
+            .sbv, .smi, .nmea, .igc, .cue, .bib, .ldif, .gpl, .hex, .css
         ]
         if textual.contains(expected), textual.contains(detected.id), expected != .html, expected != .json, expected != .plist { return }
         throw RenvertError.formatMismatch(expected: expected.rawValue, actual: detected.id.rawValue)
@@ -448,11 +493,14 @@ public final class RenameCoordinator: FileSystemMonitorDelegate {
             guard isNewFile || TransformationParser.isConversionCandidate(oldName: oldURL.lastPathComponent, newName: newURL.lastPathComponent) else { return }
             let command = try TransformationParser.parseFilename(newURL.lastPathComponent)
             let detected = try FormatDetector.detect(at: newURL, originalFilename: oldURL.lastPathComponent)
+            let settings = settingsStore.settings
             // Nothing to offer: .ipynb is JSON inside, .numbers is a ZIP, and so on. Asking to
             // "convert" those would only end in an error, so the rename is left alone.
             let convertible = command.outputs.contains { spec in
-                spec.format == .folder || spec.format == detected.id
+                guard settings.allowsFormat(detected.id), settings.allowsFormat(spec.format) else { return false }
+                return spec.format == .folder || spec.format == detected.id
                     || FormatRegistry.canConvert(from: detected.id, to: spec.format)
+                    || (spec.hasQR && QRCode.canConvert(from: detected.id, to: spec.format))
             }
             guard convertible || command.opensSettings else {
                 AppLog.info("Left alone \(newURL.lastPathComponent): no conversion from \(detected.id.rawValue)")
@@ -472,7 +520,6 @@ public final class RenameCoordinator: FileSystemMonitorDelegate {
                 command: command,
                 originalName: oldURL.lastPathComponent
             )
-            let settings = settingsStore.settings
             let needsAsk = settings.confirmationMode == .askFirst && !command.skipConfirmation || command.opensSettings
             if needsAsk {
                 DispatchQueue.main.async {

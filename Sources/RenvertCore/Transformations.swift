@@ -88,6 +88,7 @@ public enum Modifier: Equatable, Sendable {
     case ocr(language: String?)
     case transcribe
     case language(String)
+    case qr
 
     public var shortLabel: String {
         switch self {
@@ -126,6 +127,7 @@ public enum Modifier: Equatable, Sendable {
         case .ocr: return "ocr"
         case .transcribe: return "transcribe"
         case .language(let code): return "lang_\(code)"
+        case .qr: return "qr"
         }
     }
 
@@ -224,6 +226,8 @@ public struct OutputSpec: Equatable, Sendable {
     public var hasOCR: Bool {
         modifiers.contains { if case .ocr = $0 { return true }; return false }
     }
+
+    public var hasQR: Bool { modifiers.contains(.qr) }
 
     public var hasLossless: Bool {
         modifiers.contains { if case .lossless = $0 { return true }; return false }
@@ -325,6 +329,7 @@ public enum TransformationParser {
         if lower == "nobg" { return .noBackground }
         if lower == "lossless" { return .lossless }
         if lower == "transcribe" { return .transcribe }
+        if lower == "qr" { return .qr }
         if ["gray", "grey", "grayscale", "greyscale"].contains(lower) { return .gray }
         if lower == "480p" { return .maxHeight(480) }
         if lower == "720p" { return .maxHeight(720) }

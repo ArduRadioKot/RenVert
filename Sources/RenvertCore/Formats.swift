@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 public enum FormatCategory: String, Codable, CaseIterable, Sendable {
     case image, audio, video, document, ebook, email, config, spreadsheet
-    case archive, font, model, subtitle, certificate, folder
+    case archive, font, model, subtitle, certificate, folder, geo, palette
 }
 
 public enum EncodeBackend: String, Codable, Sendable {
@@ -46,7 +46,8 @@ public struct FormatDescriptor: Hashable, Sendable {
 public enum FormatID: String, Codable, CaseIterable, Sendable {
     // Images
     case ai, apng, arw, avif, bmp, cr2, cr3, dng, eps, gif, heic, icns, ico, icon
-    case jpeg, jxl, nef, orf, pcx, pef, png, ps, psd, raf, rw2, sr2, svg, svgz, tga, tiff, webp
+    case jpeg, jp2, jxl, nef, orf, pcx, pef, png, ppm, ps, psd, raf, rw2, sr2, svg, svgz, tga, tiff, webp
+    case exr, astc
     // Audio
     case aac, ac3, aiff, alac, au, caf, eac3, flac, m4a, mka, mp3, ogg, opus, tta, wav, wma, wv
     // Video
@@ -57,13 +58,18 @@ public enum FormatID: String, Codable, CaseIterable, Sendable {
     // E-books / mail
     case azw, azw3, epub, mobi, eml, emlx, msg
     // Config / tables
-    case json, plist, toml, xml, yaml, csv, numbers, parquet, sqlite, tsv, xls, xlsx
+    case json, jsonl, plist, toml, xml, yaml, csv, numbers, parquet, sqlite, tsv, xls, xlsx
+    case ini, env, properties, strings
+    case gpx, kml, geojson, tcx, nmea, igc, vcf, ics, b64
+    case webloc, url, rss, atom, m3u, cue
+    case bib, ldif
+    case gpl, hex, clr, css
     // Archives
-    case sevenZ = "7z", bz2, cbr, cbt, cbz, gzip, tar, tbz2, tgz, txz, tzst, xz, zip, zstd
+    case sevenZ = "7z", bz2, cbr, cbt, cbz, gzip, tar, tbz2, tgz, txz, tzst, xz, zip, npz, pt, zstd
     // Fonts / 3D / subtitles / certs
     case otf, ttf, woff, woff2
     case threeDS = "3ds", dae, fbx, glb, gltf, obj, ply, stl, usda, usdc, usdz
-    case ass, microdvd, ssa, srt, sub, vtt
+    case ass, microdvd, ssa, srt, sub, vtt, lrc, sbv, smi
     case der, pem
     case folder
 }
@@ -163,32 +169,44 @@ public enum FormatRegistry {
             return .unavailable
         }
         if [.csv, .tsv, .xlsx].contains(from) && nativeDocuments.contains(to) { return .native }
-        if configFormats.contains(from) && (configFormats.contains(to) || tableFormats.contains(to)) {
+        if configFormats.contains(from) && configFormats.contains(to) {
+            return .native
+        }
+        if [.json, .yaml, .plist, .xml, .toml].contains(from) && tableFormats.contains(to) {
             return .native
         }
         if tableFormats.contains(from) && (tableFormats.contains(to) || configFormats.contains(to)) {
             return nativeTables.contains(from) && nativeTables.contains(to) ? .native : .unavailable
         }
+        if from == .zip && (to == .npz || to == .pt) { return .native }
+        if (from == .npz || from == .pt) && to == .zip { return .native }
         if archiveFormats.contains(from) && archiveFormats.contains(to) {
             return archiveReadable.contains(from) && archiveWritable.contains(to) ? .ditto : .unavailable
         }
         if modelReadable.contains(from) && modelWritable.contains(to) { return .native }
         if (from == .der && to == .pem) || (from == .pem && to == .der) { return .native }
+        if from == .emlx && nativeDocuments.contains(to) { return .native }
+        if BeyondConverter.handles(from: from, to: to) { return .native }
         return .unavailable
     }
 
     public static func canConvert(from: FormatID, to: FormatID) -> Bool {
         support(from: from, to: to) != .unavailable
     }
+
+    /// Formats the user can turn off. Types with no encoder stay hidden.
+    public static var configurable: [FormatDescriptor] {
+        all.filter { $0.decode != .unavailable || $0.encode != .unavailable }
+    }
 }
 
 /// Camera RAW formats ImageIO develops into a regular bitmap.
 public let rawImageFormats: Set<FormatID> = [.arw, .cr2, .cr3, .dng, .nef, .orf, .pef, .raf, .rw2, .sr2]
 public let imageDecodable: Set<FormatID> = rawImageFormats.union([
-    .apng, .avif, .bmp, .gif, .heic, .icns, .ico, .jpeg, .jxl, .png, .psd, .svg, .svgz, .tga, .tiff, .webp, .pdf
+    .apng, .astc, .avif, .bmp, .exr, .gif, .heic, .icns, .ico, .jpeg, .jp2, .jxl, .png, .ppm, .psd, .svg, .svgz, .tga, .tiff, .webp, .pdf
 ])
 public let imageEncodable: Set<FormatID> = [
-    .avif, .bmp, .gif, .heic, .icns, .ico, .jpeg, .png, .psd, .tga, .tiff, .webp, .pdf
+    .astc, .avif, .bmp, .exr, .gif, .heic, .icns, .ico, .jpeg, .jp2, .png, .ppm, .psd, .tga, .tiff, .webp, .pdf
 ]
 public let nativeAudio: Set<FormatID> = [.aac, .aiff, .alac, .caf, .m4a, .wav]
 /// Core Audio reads MP3 and FLAC and writes FLAC, so these need no ffmpeg.
@@ -198,14 +216,14 @@ public let audioEncodable: Set<FormatID> = nativeAudio.union([.mp3, .flac, .ogg,
 public let nativeVideo: Set<FormatID> = [.mov, .mp4, .m4a]
 public let videoEncodable: Set<FormatID> = [.mov, .mp4, .mkv, .webm, .avi, .gif]
 public let videoContainers: Set<FormatID> = [.mov, .mp4, .mkv, .webm, .avi]
-public let subtitleFormats: Set<FormatID> = [.srt, .vtt, .ass, .ssa, .sub, .microdvd]
+public let subtitleFormats: Set<FormatID> = [.srt, .vtt, .ass, .ssa, .sub, .microdvd, .lrc, .sbv, .smi]
 public let documentLike: Set<FormatID> = [
-    .txt, .markdown, .html, .rtf, .rtfd, .pdf, .docx, .doc, .odt, .adoc, .rst, .org, .opml, .tex
+    .txt, .markdown, .html, .rtf, .rtfd, .pdf, .docx, .doc, .odt, .adoc, .rst, .org, .opml, .tex, .eml
 ]
-public let nativeDocuments: Set<FormatID> = [.txt, .markdown, .html, .rtf, .pdf, .docx, .doc, .odt]
-public let configFormats: Set<FormatID> = [.json, .yaml, .plist, .xml, .toml]
-public let tableFormats: Set<FormatID> = [.csv, .tsv, .xlsx, .json, .yaml]
-public let nativeTables: Set<FormatID> = [.csv, .tsv, .xlsx, .json, .yaml]
+public let nativeDocuments: Set<FormatID> = [.txt, .markdown, .html, .rtf, .pdf, .docx, .doc, .odt, .opml, .eml]
+public let configFormats: Set<FormatID> = [.json, .yaml, .plist, .xml, .toml, .ini, .env, .properties, .strings]
+public let tableFormats: Set<FormatID> = [.csv, .tsv, .xlsx, .json, .yaml, .sqlite, .jsonl]
+public let nativeTables: Set<FormatID> = [.csv, .tsv, .xlsx, .json, .yaml, .sqlite, .jsonl]
 public let archiveFormats: Set<FormatID> = [
     .zip, .tar, .tgz, .tbz2, .txz, .tzst, .cbz, .cbt, .cbr, .sevenZ, .gzip, .bz2
 ]
@@ -216,7 +234,12 @@ public let archiveWritable: Set<FormatID> = [.zip, .tar, .tgz, .tbz2, .txz, .cbz
 public let modelReadable: Set<FormatID> = [.obj, .stl, .ply, .usda, .usdc, .usdz]
 public let modelWritable: Set<FormatID> = [.obj, .stl, .ply, .usda, .usdc]
 /// Formats with no reliable signature: the name the file had before the rename decides.
-public let extensionOnlyFormats: Set<FormatID> = [.obj, .stl, .tga]
+public let extensionOnlyFormats: Set<FormatID> = [.obj, .stl, .tga, .clr]
+/// Tracks, contacts and calendars. Consul does not convert these.
+public let geoFormats: Set<FormatID> = [.gpx, .kml, .geojson, .tcx, .nmea, .igc]
+public let bookmarkFormats: Set<FormatID> = [.webloc, .url]
+public let feedFormats: Set<FormatID> = [.rss, .atom]
+public let paletteFormats: Set<FormatID> = [.gpl, .hex, .clr, .css]
 
 private func makeAll() -> [FormatDescriptor] {
     func d(
@@ -247,6 +270,10 @@ private func makeAll() -> [FormatDescriptor] {
         d(.ico, .image, ["ico"], UTType("com.microsoft.ico"), decode: .native, encode: .native),
         d(.icon, .image, ["icon"], nil, decode: .unavailable, encode: .unavailable),
         d(.jpeg, .image, ["jpg", "jpeg"], .jpeg, decode: .native, encode: .native),
+        d(.jp2, .image, ["jp2", "j2k", "jpf"], UTType("public.jpeg-2000"), decode: .native, encode: .native),
+        d(.ppm, .image, ["ppm", "pbm", "pgm", "pnm"], UTType("public.pbm"), decode: .native, encode: .native, "Netpbm bitmap, written as an 8-bit PPM."),
+        d(.exr, .image, ["exr"], UTType("com.ilm.openexr-image"), decode: .native, encode: .native),
+        d(.astc, .image, ["astc"], UTType("org.khronos.astc"), decode: .native, encode: .native, "GPU texture block. Consul does not write ASTC."),
         d(.jxl, .image, ["jxl"], UTType("public.jpeg-xl"), decode: .native, encode: .unavailable, "ImageIO reads JPEG XL but cannot write it."),
         d(.nef, .image, ["nef"], UTType("com.nikon.raw-image"), decode: .native, encode: .unavailable),
         d(.orf, .image, ["orf"], UTType("com.olympus.raw-image"), decode: .native, encode: .unavailable),
@@ -308,7 +335,7 @@ private func makeAll() -> [FormatDescriptor] {
         d(.markdown, .document, ["md", "markdown"], .plainText, decode: .native, encode: .native),
         d(.wiki, .document, ["wiki"], nil, decode: .unavailable, encode: .unavailable),
         d(.odt, .document, ["odt"], UTType("org.oasis-open.opendocument.text"), decode: .native, encode: .native, "Text and basic styling through TextKit."),
-        d(.opml, .document, ["opml"], .xml, decode: .native, encode: .native),
+        d(.opml, .document, ["opml"], .xml, decode: .native, encode: .native, "Outline titles, including nested ones."),
         d(.org, .document, ["org"], .plainText, decode: .native, encode: .native),
         d(.pages, .document, ["pages"], nil, decode: .unavailable, encode: .unavailable),
         d(.pdf, .document, ["pdf"], .pdf, decode: .native, encode: .native),
@@ -323,20 +350,25 @@ private func makeAll() -> [FormatDescriptor] {
         d(.azw3, .ebook, ["azw3"], nil, decode: .unavailable, encode: .unavailable),
         d(.epub, .ebook, ["epub"], UTType("org.idpf.epub-container"), decode: .unavailable, encode: .unavailable),
         d(.mobi, .ebook, ["mobi"], nil, decode: .unavailable, encode: .unavailable),
-        d(.eml, .email, ["eml"], nil, decode: .native, encode: .native),
+        d(.eml, .email, ["eml"], nil, decode: .native, encode: .native, "Headers and the text body. HTML parts are kept as text."),
         d(.emlx, .email, ["emlx"], nil, decode: .native, encode: .unavailable),
         d(.msg, .email, ["msg"], nil, decode: .unavailable, encode: .unavailable),
 
         d(.json, .config, ["json"], .json, decode: .native, encode: .native),
+        d(.jsonl, .spreadsheet, ["jsonl", "ndjson"], .plainText, decode: .native, encode: .native, "One JSON value per line."),
         d(.plist, .config, ["plist"], .propertyList, decode: .native, encode: .native),
         d(.toml, .config, ["toml"], .plainText, decode: .native, encode: .native),
         d(.xml, .config, ["xml"], .xml, decode: .native, encode: .native),
         d(.yaml, .config, ["yaml", "yml"], .plainText, decode: .native, encode: .native),
+        d(.ini, .config, ["ini", "cfg", "editorconfig"], .plainText, decode: .native, encode: .native, "Sections become nested objects. .editorconfig is INI."),
+        d(.env, .config, ["env"], .plainText, decode: .native, encode: .native, "KEY=VALUE files, including export lines."),
+        d(.properties, .config, ["properties"], .plainText, decode: .native, encode: .native, "Java properties."),
+        d(.strings, .config, ["strings"], .plainText, decode: .native, encode: .native, "Apple strings files."),
 
         d(.csv, .spreadsheet, ["csv"], .commaSeparatedText, decode: .native, encode: .native),
         d(.numbers, .spreadsheet, ["numbers"], nil, decode: .unavailable, encode: .unavailable),
         d(.parquet, .spreadsheet, ["parquet"], nil, decode: .unavailable, encode: .unavailable),
-        d(.sqlite, .spreadsheet, ["sqlite", "db", "sqlite3"], nil, decode: .unavailable, encode: .unavailable),
+        d(.sqlite, .spreadsheet, ["sqlite", "sqlite3", "db"], nil, decode: .native, encode: .native, "Every user table, through the system sqlite3."),
         d(.tsv, .spreadsheet, ["tsv"], .tabSeparatedText, decode: .native, encode: .native),
         d(.xls, .spreadsheet, ["xls"], nil, decode: .unavailable, encode: .unavailable),
         d(.xlsx, .spreadsheet, ["xlsx"], UTType("org.openxmlformats.spreadsheetml.sheet"), decode: .native, encode: .native),
@@ -354,10 +386,12 @@ private func makeAll() -> [FormatDescriptor] {
         d(.tzst, .archive, ["tzst"], nil, decode: .unavailable, encode: .unavailable),
         d(.xz, .archive, ["xz"], nil, decode: .unavailable, encode: .unavailable),
         d(.zip, .archive, ["zip"], .zip, decode: .ditto, encode: .ditto),
+        d(.npz, .archive, ["npz"], nil, decode: .native, encode: .native, "NumPy archive. Each file in the zip becomes a uint8 array."),
+        d(.pt, .archive, ["pt", "pth"], nil, decode: .native, encode: .native, "PyTorch zip. torch.load with weights_only off returns a dict of the original file bytes."),
         d(.zstd, .archive, ["zst", "zstd"], nil, decode: .unavailable, encode: .unavailable),
 
-        d(.otf, .font, ["otf"], UTType("public.opentype-font"), decode: .unavailable, encode: .unavailable),
-        d(.ttf, .font, ["ttf"], UTType("public.truetype-ttf-font"), decode: .unavailable, encode: .unavailable),
+        d(.otf, .font, ["otf"], UTType("public.opentype-font"), decode: .native, encode: .unavailable, "Rendered to an image. A font file is not written back."),
+        d(.ttf, .font, ["ttf", "ttc"], UTType("public.truetype-ttf-font"), decode: .native, encode: .unavailable, "Rendered to an image. A font file is not written back."),
         d(.woff, .font, ["woff"], nil, decode: .unavailable, encode: .unavailable),
         d(.woff2, .font, ["woff2"], nil, decode: .unavailable, encode: .unavailable),
 
@@ -379,6 +413,31 @@ private func makeAll() -> [FormatDescriptor] {
         d(.srt, .subtitle, ["srt"], nil, decode: .native, encode: .native),
         d(.sub, .subtitle, ["sub"], nil, decode: .native, encode: .native),
         d(.vtt, .subtitle, ["vtt"], nil, decode: .native, encode: .native),
+        d(.lrc, .subtitle, ["lrc"], nil, decode: .native, encode: .native, "Timed lyrics."),
+        d(.sbv, .subtitle, ["sbv"], nil, decode: .native, encode: .native, "YouTube subtitles."),
+        d(.smi, .subtitle, ["smi", "sami"], nil, decode: .native, encode: .native, "SAMI captions."),
+
+        d(.nmea, .geo, ["nmea"], .plainText, decode: .native, encode: .native, "NMEA 0183 sentences."),
+        d(.igc, .geo, ["igc"], .plainText, decode: .native, encode: .native, "IGC flight logs."),
+        d(.gpx, .geo, ["gpx"], .xml, decode: .native, encode: .native),
+        d(.kml, .geo, ["kml"], .xml, decode: .native, encode: .native),
+        d(.geojson, .geo, ["geojson"], .json, decode: .native, encode: .native),
+        d(.tcx, .geo, ["tcx"], .xml, decode: .native, encode: .native, "Garmin Training Center tracks."),
+        d(.webloc, .document, ["webloc"], nil, decode: .native, encode: .native, "macOS web location."),
+        d(.url, .document, ["url"], nil, decode: .native, encode: .native, "Windows internet shortcut."),
+        d(.rss, .document, ["rss"], .xml, decode: .native, encode: .native, "RSS items."),
+        d(.atom, .document, ["atom"], .xml, decode: .native, encode: .native, "Atom entries."),
+        d(.m3u, .document, ["m3u", "m3u8"], .plainText, decode: .native, encode: .native, "Playlists, including HLS media playlists."),
+        d(.cue, .document, ["cue"], .plainText, decode: .native, encode: .native, "CD cue sheets."),
+        d(.bib, .document, ["bib"], .plainText, decode: .native, encode: .native, "BibTeX bibliography."),
+        d(.ldif, .document, ["ldif"], .plainText, decode: .native, encode: .native, "LDAP directory entries."),
+        d(.gpl, .palette, ["gpl"], .plainText, decode: .native, encode: .native, "GIMP palette."),
+        d(.hex, .palette, ["hex"], .plainText, decode: .native, encode: .native, "Hex color list."),
+        d(.clr, .palette, ["clr"], nil, decode: .native, encode: .native, "macOS color list."),
+        d(.css, .palette, ["css"], UTType("public.css"), decode: .native, encode: .native, "CSS custom properties for the colors."),
+        d(.vcf, .document, ["vcf", "vcard"], nil, decode: .native, encode: .native, "Contacts."),
+        d(.ics, .document, ["ics", "ical"], nil, decode: .native, encode: .native, "Calendar events."),
+        d(.b64, .document, ["b64", "base64"], .plainText, decode: .native, encode: .native, "Base64 of the original bytes."),
 
         d(.der, .certificate, ["der", "cer"], nil, decode: .native, encode: .native),
         d(.pem, .certificate, ["pem", "crt"], nil, decode: .native, encode: .native),

@@ -5,7 +5,7 @@ import RenvertCore
 #endif
 
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case general, folders, conversions, performance, history, about
+    case general, folders, conversions, formats, performance, history, about
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: L("General")
         case .folders: L("Folders")
         case .conversions: L("Conversions")
+        case .formats: L("Formats")
         case .performance: L("Performance")
         case .history: L("History")
         case .about: L("About")
@@ -25,6 +26,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: "gearshape"
         case .folders: "folder"
         case .conversions: "arrow.triangle.2.circlepath"
+        case .formats: "checklist"
         case .performance: "speedometer"
         case .history: "clock"
         case .about: "info.circle"
@@ -36,6 +38,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: .gray
         case .folders: .blue
         case .conversions: .orange
+        case .formats: .purple
         case .performance: .green
         case .history: .indigo
         case .about: .teal
@@ -100,6 +103,7 @@ struct SettingsView: View {
         case .general: GeneralSettingsView()
         case .folders: FolderSettingsView()
         case .conversions: ConversionSettingsView()
+        case .formats: FormatSettingsView()
         case .performance: PerformanceSettingsView()
         case .history: HistorySettingsView()
         case .about: AboutSettingsView()
@@ -300,6 +304,111 @@ struct ConversionSettingsView: View {
     }
 }
 
+struct FormatSettingsView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var query = ""
+
+    private var groups: [(category: FormatCategory, formats: [FormatDescriptor])] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let order: [FormatCategory] = [
+            .image, .audio, .video, .document, .email, .spreadsheet, .config, .geo, .palette,
+            .archive, .subtitle, .font, .model, .certificate, .folder, .ebook
+        ]
+        return order.compactMap { category in
+            let formats = FormatRegistry.configurable
+                .filter { $0.category == category }
+                .filter { descriptor in
+                    guard !needle.isEmpty else { return true }
+                    let names = ([descriptor.id.rawValue] + descriptor.extensions).joined(separator: " ").lowercased()
+                    return names.contains(needle)
+                }
+                .sorted { $0.id.rawValue < $1.id.rawValue }
+            return formats.isEmpty ? nil : (category, formats)
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                TextField(L("Search formats"), text: $query)
+                HStack {
+                    Button(L("Enable all")) {
+                        model.updateSettings { $0.disabledFormats = [] }
+                    }
+                    Button(L("Turn all off")) {
+                        let ids = FormatRegistry.configurable.map(\.id.rawValue)
+                        model.updateSettings { $0.disabledFormats = ids }
+                    }
+                }
+            } footer: {
+                Text(L("Turn a format off and Renvert will ignore it when you rename a file."))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(groups, id: \.category) { group in
+                Section {
+                    ForEach(group.formats, id: \.id) { descriptor in
+                        Toggle(isOn: binding(descriptor.id)) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(descriptor.id.rawValue.uppercased())
+                                Text(descriptor.extensions.joined(separator: ", "))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } header: {
+                    HStack {
+                        Text(title(group.category))
+                        Spacer()
+                        let enabled = group.formats.allSatisfy { model.settings.allowsFormat($0.id) }
+                        Button(enabled ? L("Turn off") : L("Turn on")) {
+                            let turnOn = !enabled
+                            model.updateSettings { settings in
+                                for descriptor in group.formats {
+                                    settings.setFormat(descriptor.id, enabled: turnOn)
+                                }
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    private func binding(_ id: FormatID) -> Binding<Bool> {
+        Binding(
+            get: { model.settings.allowsFormat(id) },
+            set: { enabled in model.updateSettings { $0.setFormat(id, enabled: enabled) } }
+        )
+    }
+
+    private func title(_ category: FormatCategory) -> String {
+        switch category {
+        case .image: L("Images")
+        case .audio: L("Audio")
+        case .video: L("Video")
+        case .document: L("Documents")
+        case .email: L("Mail")
+        case .spreadsheet: L("Spreadsheets")
+        case .config: L("Config")
+        case .geo: L("Tracks")
+        case .palette: L("Palettes")
+        case .archive: L("Archives")
+        case .font: L("Fonts")
+        case .model: L("3D models")
+        case .subtitle: L("Subtitles")
+        case .certificate: L("Certificates")
+        case .folder: L("Folder")
+        case .ebook: L("E-books")
+        }
+    }
+}
+
 struct PerformanceSettingsView: View {
     @EnvironmentObject private var model: AppModel
 
@@ -381,6 +490,12 @@ struct HistorySettingsView: View {
             }
             .tableStyle(.bordered)
             .scrollContentBackground(.hidden)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                    .allowsHitTesting(false)
+            }
         }
         .padding(20)
         .onAppear { model.refreshHistory() }

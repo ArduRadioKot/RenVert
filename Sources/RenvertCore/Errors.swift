@@ -6,6 +6,7 @@ public enum RenvertError: Error, LocalizedError, Equatable {
     case unknownFormat(String)
     case invalidModifier(String)
     case unsupportedConversion(from: String, to: String)
+    case formatDisabled(String)
     case formatMismatch(expected: String, actual: String)
     case fileNotFound(String)
     case fileBusy(String)
@@ -34,6 +35,8 @@ public enum RenvertError: Error, LocalizedError, Equatable {
             return L("Invalid modifier “\(token)”.")
         case .unsupportedConversion(let from, let to):
             return L("Conversion from \(from) to \(to) is not supported.")
+        case .formatDisabled(let name):
+            return L("“\(name)” is turned off in Settings.")
         case .formatMismatch(let expected, let actual):
             return L("Expected \(expected) but produced \(actual).")
         case .fileNotFound(let path):

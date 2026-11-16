@@ -32,7 +32,8 @@ enum GlassHost {
             glass.cornerRadius = cornerRadius
             glass.tintColor = NSColor(name: nil) { appearance in
                 let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                return NSColor.white.withAlphaComponent(dark ? 0.16 : 0.5)
+                // Dark mode gets a black veil, which darkens the glass instead of lifting it.
+                return dark ? NSColor.black.withAlphaComponent(0.3) : NSColor.white.withAlphaComponent(0.5)
             }
             backdrop = glass
         } else {

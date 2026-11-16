@@ -226,7 +226,10 @@ public enum SubtitleIO {
 
     public static func convert(from source: URL, to format: FormatID, destination: URL) throws {
         let text = try String(contentsOf: source, encoding: .utf8)
-        let cues = parseCues(text)
+        let arrow = parseCues(text)
+        let sami = arrow.isEmpty ? parseSAMI(text) : []
+        let sbv = arrow.isEmpty && sami.isEmpty ? parseSBV(text) : []
+        let cues = !arrow.isEmpty ? arrow : (!sami.isEmpty ? sami : (!sbv.isEmpty ? sbv : parseLRC(text)))
         switch format {
         case .srt:
             let body = cues.enumerated().map { index, cue in
@@ -240,6 +243,22 @@ public enum SubtitleIO {
             try body.write(to: destination, atomically: true, encoding: .utf8)
         case .txt:
             try cues.map(\.2).joined(separator: "\n").write(to: destination, atomically: true, encoding: .utf8)
+        case .lrc:
+            let body = cues.map { cue in
+                let lyric = cue.2.replacingOccurrences(of: "\n", with: " ")
+                return "\(formatLRC(cue.0))\(lyric)"
+            }.joined(separator: "\n")
+            try (body + "\n").write(to: destination, atomically: true, encoding: .utf8)
+        case .sbv:
+            let body = cues.map { cue in
+                "\(formatSBV(cue.0)),\(formatSBV(cue.1))\n\(cue.2.replacingOccurrences(of: "\n", with: " "))\n"
+            }.joined(separator: "\n")
+            try body.write(to: destination, atomically: true, encoding: .utf8)
+        case .smi:
+            let body = cues.map { cue in
+                "<SYNC Start=\(Int((cue.0 * 1000).rounded()))><P>\(cue.2.replacingOccurrences(of: "<", with: "&lt;"))"
+            }.joined(separator: "\n")
+            try "<SAMI><BODY>\n\(body)\n</BODY></SAMI>\n".write(to: destination, atomically: true, encoding: .utf8)
         default:
             try text.write(to: destination, atomically: true, encoding: .utf8)
         }
@@ -261,6 +280,98 @@ public enum SubtitleIO {
             cues.append((start, end, body))
         }
         return cues
+    }
+
+    private static func parseSBV(_ text: String) -> [(Double, Double, String)] {
+        var cues: [(Double, Double, String)] = []
+        for block in text.components(separatedBy: "\n\n") {
+            let lines = block.split(whereSeparator: \.isNewline).map(String.init)
+            guard let header = lines.first else { continue }
+            let parts = header.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2, let start = parseSBVTime(parts[0]), let end = parseSBVTime(parts[1]) else { continue }
+            let body = lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !body.isEmpty { cues.append((start, end, body)) }
+        }
+        return cues
+    }
+
+    private static func parseSBVTime(_ raw: String) -> Double? {
+        let pieces = raw.split(separator: ".")
+        let clock = pieces[0].split(separator: ":")
+        guard clock.count == 3, let hours = Double(clock[0]), let minutes = Double(clock[1]), let seconds = Double(clock[2]) else { return nil }
+        let fraction = pieces.count > 1 ? (Double(pieces[1]) ?? 0) / pow(10, Double(pieces[1].count)) : 0
+        return hours * 3600 + minutes * 60 + seconds + fraction
+    }
+
+    private static func formatSBV(_ seconds: TimeInterval) -> String {
+        let total = max(0, seconds)
+        let hours = Int(total) / 3600
+        let minutes = (Int(total) % 3600) / 60
+        let whole = Int(total) % 60
+        let millis = Int((total - floor(total)) * 1000)
+        return String(format: "%d:%02d:%02d.%03d", hours, minutes, whole, millis)
+    }
+
+    private static func parseSAMI(_ text: String) -> [(Double, Double, String)] {
+        let pattern = #"<sync\b[^>]*start\s*=\s*["']?(\d+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [] }
+        let ns = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+        guard !matches.isEmpty else { return [] }
+        return matches.enumerated().compactMap { index, match in
+            let start = Double(ns.substring(with: match.range(at: 1))) ?? 0
+            let from = match.range.location + match.range.length
+            let to = index + 1 < matches.count ? matches[index + 1].range.location : ns.length
+            var body = ns.substring(with: NSRange(location: from, length: max(0, to - from)))
+            body = body.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            body = body.replacingOccurrences(of: "&nbsp;", with: " ").replacingOccurrences(of: "&lt;", with: "<")
+            body = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            let end = index + 1 < matches.count ? (Double(ns.substring(with: matches[index + 1].range(at: 1))) ?? start + 2000) : start + 2000
+            return body.isEmpty ? nil : (start / 1000, end / 1000, body)
+        }
+    }
+
+    private static func parseLRC(_ text: String) -> [(Double, Double, String)] {
+        struct Line { var time: Double; var text: String }
+        var lines: [Line] = []
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = String(raw)
+            var times: [Double] = []
+            var index = line.startIndex
+            while index < line.endIndex, line[index] == "[" {
+                guard let close = line[index...].firstIndex(of: "]") else { break }
+                let inside = String(line[line.index(after: index)..<close])
+                guard let time = parseLRCTime(inside) else { break }
+                times.append(time)
+                index = line.index(after: close)
+            }
+            let lyric = line[index...].trimmingCharacters(in: .whitespaces)
+            guard !lyric.isEmpty else { continue }
+            for time in times { lines.append(Line(time: time, text: String(lyric))) }
+        }
+        lines.sort { $0.time < $1.time }
+        return lines.enumerated().map { offset, line in
+            let end = offset + 1 < lines.count ? lines[offset + 1].time : line.time + 2
+            return (line.time, max(end, line.time + 0.2), line.text)
+        }
+    }
+
+    private static func parseLRCTime(_ raw: String) -> Double? {
+        let parts = raw.split { $0 == ":" || $0 == "." }
+        guard parts.count >= 2, let minutes = Double(parts[0]), let seconds = Double(parts[1]) else { return nil }
+        var fraction = 0.0
+        if parts.count >= 3, let piece = Double(parts[2]) {
+            fraction = piece / pow(10, Double(parts[2].count))
+        }
+        return minutes * 60 + seconds + fraction
+    }
+
+    private static func formatLRC(_ seconds: TimeInterval) -> String {
+        let total = max(0, seconds)
+        let minutes = Int(total) / 60
+        let whole = Int(total) % 60
+        let centiseconds = Int((total - floor(total)) * 100)
+        return String(format: "[%02d:%02d.%02d]", minutes, whole, centiseconds)
     }
 
     private static func parseClock(_ raw: String) -> Double {

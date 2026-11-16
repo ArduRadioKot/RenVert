@@ -5,10 +5,48 @@ public struct SpreadsheetConverter: Converter {
 
     public func convert(from source: URL, detected: FormatID, spec: OutputSpec, to destination: URL, context: ConversionContext) throws {
         try context.cancellation.throwIfCancelled()
+        if detected == .sqlite || spec.format == .sqlite || detected == .jsonl || spec.format == .jsonl {
+            try convertDatabase(from: source, detected: detected, spec: spec, to: destination)
+            context.onProgress?(1)
+            return
+        }
         let table = try loadTable(source, format: detected)
         context.onProgress?(0.5)
         try writeTable(table, format: spec.format, to: destination)
         context.onProgress?(1)
+    }
+
+    private func convertDatabase(from source: URL, detected: FormatID, spec: OutputSpec, to destination: URL) throws {
+        if detected == .jsonl {
+            let rows = try JSONLines.read(source)
+            if spec.format == .sqlite {
+                try SQLiteDatabase.write(rows, table: "data", to: destination)
+            } else if spec.format == .jsonl {
+                try JSONLines.write(rows, to: destination)
+            } else {
+                try writeTable(rows, format: spec.format, to: destination)
+            }
+            return
+        }
+        if spec.format == .jsonl {
+            try JSONLines.write(try loadTable(source, format: detected), to: destination)
+            return
+        }
+        if detected == .sqlite {
+            let tables = try SQLiteDatabase.read(source)
+            if spec.format == .json, tables.count > 1 {
+                try SQLiteDatabase.writeJSON(tables, to: destination)
+                return
+            }
+            let rows = SQLiteDatabase.flatten(tables)
+            if spec.format == .sqlite {
+                try SQLiteDatabase.write(rows, table: tables.first?.name ?? "data", to: destination)
+            } else {
+                try writeTable(rows, format: spec.format, to: destination)
+            }
+            return
+        }
+        try SQLiteDatabase.write(try loadTable(source, format: detected), table: "data", to: destination)
     }
 
     /// `format` is what the bytes are; the file's extension is already the target's after a rename.
@@ -531,5 +569,187 @@ enum XLSXWriter {
             n = n / 26 - 1
         } while n >= 0
         return name
+    }
+}
+
+struct SQLiteTable {
+    var name: String
+    var rows: [[String]]
+}
+
+enum SQLiteDatabase {
+    private static let tool = "/usr/bin/sqlite3"
+
+    static func read(_ url: URL) throws -> [SQLiteTable] {
+        let names = try query(url, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY rowid", header: false)
+            .flatMap { $0 }
+            .filter { !$0.isEmpty }
+        guard !names.isEmpty else { throw RenvertError.invalidInput(L("The database has no tables.")) }
+        return try names.map { name in
+            let rows = try query(url, "SELECT * FROM \(quoteIdent(name))", header: true)
+            return SQLiteTable(name: name, rows: rows.isEmpty ? [["value"]] : rows)
+        }
+    }
+
+    static func flatten(_ tables: [SQLiteTable]) -> [[String]] {
+        guard tables.count > 1 else { return tables.first?.rows ?? [] }
+        var headers = ["table"]
+        for table in tables {
+            for header in table.rows.first ?? [] where !headers.contains(header) {
+                headers.append(header)
+            }
+        }
+        var rows = [headers]
+        for table in tables {
+            let local = table.rows.first ?? []
+            for row in table.rows.dropFirst() {
+                var mapped = Array(repeating: "", count: headers.count)
+                mapped[0] = table.name
+                for (index, header) in local.enumerated() where index < row.count {
+                    if let slot = headers.firstIndex(of: header) { mapped[slot] = row[index] }
+                }
+                rows.append(mapped)
+            }
+        }
+        return rows
+    }
+
+    static func write(_ rows: [[String]], table: String, to url: URL) throws {
+        let headers = rows.first.map(unique) ?? ["value"]
+        let body = rows.count > 1 ? Array(rows.dropFirst()) : []
+        var grouped: [String: [[String]]] = [:]
+        var order: [String] = []
+        if headers.first == "table" {
+            for row in body {
+                let name = row.first?.isEmpty == false ? row[0] : table
+                if grouped[name] == nil { order.append(name) }
+                grouped[name, default: []].append(Array(row.dropFirst()))
+            }
+        }
+        var script = "BEGIN;\n"
+        if grouped.isEmpty {
+            script += create(table, headers: headers, rows: body)
+        } else {
+            let columns = Array(headers.dropFirst())
+            for name in order {
+                script += create(name, headers: columns, rows: grouped[name] ?? [])
+            }
+        }
+        script += "COMMIT;\n"
+        let sql = FileManager.default.temporaryDirectory.appendingPathComponent("renvert-sql-\(UUID().uuidString).sql")
+        try script.write(to: sql, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: sql) }
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+        let result = ProcessRunner.run(executable: tool, arguments: [url.path, ".read \(sql.path)"])
+        guard result.exitCode == 0 else {
+            throw RenvertError.converterFailed(result.stderr.isEmpty ? L("Could not write the database.") : result.stderr)
+        }
+    }
+
+    static func writeJSON(_ tables: [SQLiteTable], to url: URL) throws {
+        var object: [String: Any] = [:]
+        for table in tables {
+            let headers = unique(table.rows.first ?? [])
+            let records: [[String: String]] = table.rows.dropFirst().map { row in
+                var record: [String: String] = [:]
+                for (index, header) in headers.enumerated() {
+                    record[header] = index < row.count ? row[index] : ""
+                }
+                return record
+            }
+            object[table.name] = records
+        }
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: url)
+    }
+
+    private static func create(_ name: String, headers: [String], rows: [[String]]) -> String {
+        let columns = headers.isEmpty ? ["value"] : headers
+        var sql = "CREATE TABLE \(quoteIdent(name)) (\(columns.map { "\(quoteIdent($0)) TEXT" }.joined(separator: ", ")));\n"
+        for row in rows {
+            let values = columns.indices.map { index in quoteString(index < row.count ? row[index] : "") }
+            sql += "INSERT INTO \(quoteIdent(name)) VALUES (\(values.joined(separator: ", ")));\n"
+        }
+        return sql
+    }
+
+    private static func query(_ url: URL, _ sql: String, header: Bool) throws -> [[String]] {
+        var arguments = ["-separator", "\u{1F}", "-newline", "\u{1E}"]
+        if header { arguments.append("-header") }
+        arguments += [url.path, sql]
+        let result = ProcessRunner.run(executable: tool, arguments: arguments)
+        guard result.exitCode == 0 else {
+            throw RenvertError.converterFailed(result.stderr.isEmpty ? L("Could not read the database.") : result.stderr)
+        }
+        let lines = result.stdout.split(separator: "\u{1E}", omittingEmptySubsequences: false).map(String.init)
+        let rows = lines.dropLast().map { $0.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init) }
+        return rows.filter { !$0.allSatisfy(\.isEmpty) }
+    }
+
+    private static func unique(_ headers: [String]) -> [String] {
+        var seen: [String: Int] = [:]
+        return headers.enumerated().map { index, raw in
+            let base = raw.trimmingCharacters(in: .whitespaces).isEmpty ? "column\(index + 1)" : raw
+            seen[base, default: 0] += 1
+            return seen[base] == 1 ? base : "\(base)_\(seen[base]!)"
+        }
+    }
+
+    private static func quoteIdent(_ name: String) -> String {
+        "\"\(name.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+
+    private static func quoteString(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "''"))'"
+    }
+}
+
+enum JSONLines {
+    static func read(_ url: URL) throws -> [[String]] {
+        let text = DelimitedText.decode(try Data(contentsOf: url))
+        let lines = text.split(whereSeparator: \.isNewline).map(String.init).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !lines.isEmpty else { throw RenvertError.invalidInput(L("The JSON Lines file is empty.")) }
+        var records: [[String: String]] = []
+        var headers: [String] = []
+        for line in lines {
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) else {
+                throw RenvertError.invalidInput(L("A JSON Lines row is not valid JSON."))
+            }
+            let record = fields(of: object)
+            for key in record.keys where !headers.contains(key) { headers.append(key) }
+            records.append(record)
+        }
+        headers.sort()
+        return [headers] + records.map { record in headers.map { record[$0] ?? "" } }
+    }
+
+    static func write(_ rows: [[String]], to url: URL) throws {
+        let headers = rows.first ?? ["value"]
+        let lines: [String] = rows.dropFirst().map { row in
+            var object: [String: String] = [:]
+            for (index, header) in headers.enumerated() {
+                object[header] = index < row.count ? row[index] : ""
+            }
+            let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
+        try lines.joined(separator: "\n").appending(lines.isEmpty ? "" : "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func fields(of object: Any) -> [String: String] {
+        if let record = object as? [String: Any] {
+            return record.mapValues { value in
+                if let text = value as? String { return text }
+                if let number = value as? NSNumber { return number.stringValue }
+                if JSONSerialization.isValidJSONObject(value),
+                   let data = try? JSONSerialization.data(withJSONObject: value),
+                   let text = String(data: data, encoding: .utf8) { return text }
+                return String(describing: value)
+            }
+        }
+        return ["value": String(describing: object)]
     }
 }

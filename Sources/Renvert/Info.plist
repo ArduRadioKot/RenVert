@@ -4,40 +4,35 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
-	<key>CFBundleLocalizations</key>
-	<array>
-		<string>en</string>
-		<string>ru</string>
-	</array>
 	<key>CFBundleExecutable</key>
 	<string>Renvert</string>
 	<key>CFBundleIdentifier</key>
 	<string>app.renvert.macos</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ru</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>Renvert</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>1.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>1.2.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSHumanReadableCopyright</key>
-	<string>© 2026 FrogeeSoft</string>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>RenvertGitHubRepository</key>
-	<string>ArduRadioKot/RenVert</string>
-	<key>NSSupportsAutomaticTermination</key>
-	<false/>	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Renvert transcribes audio and video on this Mac when you add +transcribe or rename a file to SRT, VTT, or TXT.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Renvert uses system services so Finder can send selected files for conversion.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 FrogeeSoft</string>
 	<key>NSServices</key>
 	<array>
 		<dict>
@@ -62,5 +57,11 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Renvert transcribes audio and video on this Mac when you add +transcribe or rename a file to SRT, VTT, or TXT.</string>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>RenvertGitHubRepository</key>
+	<string>ArduRadioKot/RenVert</string>
 </dict>
 </plist>

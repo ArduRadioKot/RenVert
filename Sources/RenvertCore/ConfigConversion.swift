@@ -40,6 +40,14 @@ public enum ConfigValue: Equatable, Sendable {
             return try YAMLBridge.parse(DelimitedText.decode(data))
         case .toml:
             return try TOMLBridge.parse(DelimitedText.decode(data))
+        case .ini:
+            return INIBridge.parse(DelimitedText.decode(data))
+        case .env:
+            return ENVBridge.parse(DelimitedText.decode(data))
+        case .properties:
+            return PropertiesBridge.parse(DelimitedText.decode(data))
+        case .strings:
+            return StringsBridge.parse(DelimitedText.decode(data))
         default:
             if let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
                 return try fromJSON(json)
@@ -64,6 +72,14 @@ public enum ConfigValue: Equatable, Sendable {
             return Data(dumpYAML(value).utf8)
         case .toml:
             return Data(TOMLBridge.dump(value).utf8)
+        case .ini:
+            return Data(INIBridge.dump(value).utf8)
+        case .env:
+            return Data(ENVBridge.dump(value).utf8)
+        case .properties:
+            return Data(PropertiesBridge.dump(value).utf8)
+        case .strings:
+            return Data(StringsBridge.dump(value).utf8)
         default:
             throw RenvertError.unsupportedConversion(from: "config", to: format.rawValue)
         }
@@ -517,5 +533,203 @@ final class SimpleXML: NSObject, XMLParserDelegate {
         } else {
             stack[stack.count - 1].children[elementName] = value
         }
+    }
+}
+
+enum INIBridge {
+    static func parse(_ text: String) -> ConfigValue {
+        var root: [String: ConfigValue] = [:]
+        var section: String?
+        var sectionMap: [String: ConfigValue] = [:]
+        func commit() {
+            if let section {
+                root[section] = .object(sectionMap)
+                sectionMap = [:]
+            }
+        }
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = String(raw).trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") || line.hasPrefix(";") { continue }
+            if line.hasPrefix("[") && line.hasSuffix("]") && !line.hasPrefix("[[") {
+                commit()
+                section = String(line.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+                sectionMap = [:]
+                continue
+            }
+            guard let eq = line.firstIndex(of: "=") else { continue }
+            let key = line[..<eq].trimmingCharacters(in: .whitespaces)
+            let rawValue = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+            guard !key.isEmpty else { continue }
+            let value = scalar(String(rawValue))
+            if section == nil {
+                root[key] = value
+            } else {
+                sectionMap[key] = value
+            }
+        }
+        commit()
+        return .object(root)
+    }
+
+    static func dump(_ value: ConfigValue) -> String {
+        guard case .object(let object) = value else { return plain(value) + "\n" }
+        let sections = object.keys.filter { if case .object = object[$0]! { return true }; return false }.sorted()
+        let scalars = object.keys.filter { !sections.contains($0) }.sorted()
+        var lines: [String] = []
+        for key in scalars { lines.append("\(key) = \(plain(object[key]!))") }
+        for key in sections {
+            if !lines.isEmpty { lines.append("") }
+            lines.append("[\(key)]")
+            if case .object(let inner) = object[key]! {
+                for child in inner.keys.sorted() {
+                    lines.append("\(child) = \(plain(inner[child]!))")
+                }
+            }
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    static func plain(_ value: ConfigValue) -> String {
+        switch value {
+        case .null: return ""
+        case .bool(let flag): return flag ? "true" : "false"
+        case .number(let number):
+            return number.rounded() == number && abs(number) < Double(Int.max) ? String(Int(number)) : String(number)
+        case .string(let text): return text
+        case .array(let items): return items.map(plain).joined(separator: ",")
+        case .object: return ""
+        }
+    }
+
+    private static func scalar(_ text: String) -> ConfigValue {
+        if text == "true" { return .bool(true) }
+        if text == "false" { return .bool(false) }
+        if let number = Double(text), !text.isEmpty, text.allSatisfy({ $0.isNumber || $0 == "." || $0 == "-" }) {
+            return .number(number)
+        }
+        return .string(text)
+    }
+}
+
+enum ENVBridge {
+    static func parse(_ text: String) -> ConfigValue {
+        var object: [String: ConfigValue] = [:]
+        for raw in text.split(whereSeparator: \.isNewline) {
+            var line = String(raw).trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+            if line.hasPrefix("export ") { line.removeFirst("export ".count) }
+            guard let eq = line.firstIndex(of: "=") else { continue }
+            let key = line[..<eq].trimmingCharacters(in: .whitespaces)
+            var value = String(line[line.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+            if value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") {
+                value = unescape(String(value.dropFirst().dropLast()))
+            } else if value.count >= 2, value.hasPrefix("'"), value.hasSuffix("'") {
+                value = String(value.dropFirst().dropLast())
+            }
+            guard !key.isEmpty else { continue }
+            object[key] = .string(value)
+        }
+        return .object(object)
+    }
+
+    static func dump(_ value: ConfigValue) -> String {
+        guard case .object(let object) = value else { return "" }
+        return object.keys.sorted().map { "\($0)=\(INIBridge.plain(object[$0]!))" }.joined(separator: "\n") + "\n"
+    }
+
+    private static func unescape(_ text: String) -> String {
+        var out = ""
+        var escape = false
+        for character in text {
+            if escape {
+                out.append(character == "n" ? "\n" : character)
+                escape = false
+            } else if character == "\\" {
+                escape = true
+            } else {
+                out.append(character)
+            }
+        }
+        return out
+    }
+}
+
+enum PropertiesBridge {
+    static func parse(_ text: String) -> ConfigValue {
+        var object: [String: ConfigValue] = [:]
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = String(raw).trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") || line.hasPrefix("!") { continue }
+            guard let eq = line.firstIndex(of: "=") else { continue }
+            let key = line[..<eq].trimmingCharacters(in: .whitespaces)
+            let value = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+            guard !key.isEmpty else { continue }
+            object[String(key)] = .string(String(value))
+        }
+        return .object(object)
+    }
+
+    static func dump(_ value: ConfigValue) -> String {
+        guard case .object(let object) = value else { return "" }
+        var flat: [String: ConfigValue] = [:]
+        func walk(_ object: [String: ConfigValue], prefix: String) {
+            for key in object.keys.sorted() {
+                let path = prefix.isEmpty ? key : "\(prefix).\(key)"
+                if case .object(let child) = object[key]! {
+                    walk(child, prefix: path)
+                } else {
+                    flat[path] = object[key]
+                }
+            }
+        }
+        walk(object, prefix: "")
+        return flat.keys.sorted().map { "\($0)=\(INIBridge.plain(flat[$0]!))" }.joined(separator: "\n") + "\n"
+    }
+}
+
+enum StringsBridge {
+    static func parse(_ text: String) -> ConfigValue {
+        var object: [String: ConfigValue] = [:]
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = String(raw).trimmingCharacters(in: .whitespaces)
+            guard let eq = line.firstIndex(of: "=") else { continue }
+            guard let key = quoted(String(line[..<eq])) else { continue }
+            guard let value = quoted(String(line[eq...])) else { continue }
+            object[key] = .string(value)
+        }
+        return .object(object)
+    }
+
+    static func dump(_ value: ConfigValue) -> String {
+        guard case .object(let object) = value else { return "" }
+        return object.keys.sorted().map { key in
+            "\"\(escape(key))\" = \"\(escape(INIBridge.plain(object[key]!)))\";"
+        }.joined(separator: "\n") + "\n"
+    }
+
+    private static func quoted(_ text: String) -> String? {
+        guard let start = text.firstIndex(of: "\"") else { return nil }
+        var index = text.index(after: start)
+        var raw = ""
+        while index < text.endIndex {
+            let character = text[index]
+            if character == "\\" {
+                let next = text.index(after: index)
+                guard next < text.endIndex else { break }
+                raw.append(text[next] == "n" ? "\n" : text[next])
+                index = text.index(after: next)
+                continue
+            }
+            if character == "\"" { return raw }
+            raw.append(character)
+            index = text.index(after: index)
+        }
+        return nil
+    }
+
+    private static func escape(_ text: String) -> String {
+        text.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
     }
 }

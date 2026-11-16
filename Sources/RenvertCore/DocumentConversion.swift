@@ -91,6 +91,10 @@ public struct DocumentConverter: Converter {
             return NSAttributedString(string: try DocxIO.readText(url), attributes: Self.bodyAttributes)
         case .pdf:
             return NSAttributedString(string: try pdfText(url, spec: spec), attributes: Self.bodyAttributes)
+        case .eml, .emlx:
+            return NSAttributedString(string: try MailMessage.read(url, format: format), attributes: Self.bodyAttributes)
+        case .opml:
+            return NSAttributedString(string: try Outline.read(url), attributes: Self.bodyAttributes)
         default:
             let text = DelimitedText.decode(try Data(contentsOf: url))
             return NSAttributedString(string: text, attributes: Self.bodyAttributes)
@@ -180,6 +184,10 @@ public struct DocumentConverter: Converter {
             try data.write(to: url)
         case .pdf:
             try writePDF(attributed, to: url)
+        case .eml:
+            try MailMessage.write(attributed.string).write(to: url, atomically: true, encoding: .utf8)
+        case .opml:
+            try Outline.write(attributed.string).write(to: url, atomically: true, encoding: .utf8)
         case .docx:
             // TextKit writes styling and tables; the plain writer is the fallback.
             if let data = try? attributed.data(
@@ -392,5 +400,167 @@ enum DocxIO {
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
+    }
+}
+
+enum MailMessage {
+    static func read(_ url: URL, format: FormatID) throws -> String {
+        var data = try Data(contentsOf: url)
+        if format == .emlx {
+            guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
+                throw RenvertError.invalidInput(L("The message could not be read."))
+            }
+            let rest = text.drop { $0 != "\n" }.dropFirst()
+            data = Data(rest.utf8)
+        }
+        guard let raw = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
+            throw RenvertError.invalidInput(L("The message could not be read."))
+        }
+        let parts = splitHeader(raw)
+        let headers = headerMap(parts.header)
+        let body = decodedBody(parts.body, headers: headers)
+        var lines: [String] = []
+        for key in ["From", "To", "Subject", "Date"] {
+            if let value = headers[key.lowercased()] { lines.append("\(key): \(value)") }
+        }
+        if !lines.isEmpty { lines.append("") }
+        lines.append(body.trimmingCharacters(in: .whitespacesAndNewlines))
+        return lines.joined(separator: "\n")
+    }
+
+    static func write(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subject = trimmed.split(whereSeparator: \.isNewline).first.map(String.init) ?? "Message"
+        return """
+        From: Renvert
+        Subject: \(subject.prefix(80))
+        MIME-Version: 1.0
+        Content-Type: text/plain; charset=utf-8
+        Content-Transfer-Encoding: 8bit
+
+        \(trimmed)
+        """
+    }
+
+    private static func splitHeader(_ raw: String) -> (header: String, body: String) {
+        if let range = raw.range(of: "\r\n\r\n") { return (String(raw[..<range.lowerBound]), String(raw[range.upperBound...])) }
+        if let range = raw.range(of: "\n\n") { return (String(raw[..<range.lowerBound]), String(raw[range.upperBound...])) }
+        return ("", raw)
+    }
+
+    private static func headerMap(_ header: String) -> [String: String] {
+        var map: [String: String] = [:]
+        var current = ""
+        var key = ""
+        for line in header.split(separator: "\n", omittingEmptySubsequences: false).map({ $0.trimmingCharacters(in: .init(charactersIn: "\r")) }) {
+            if line.hasPrefix(" ") || line.hasPrefix("\t") {
+                current += " " + line.trimmingCharacters(in: .whitespaces)
+                continue
+            }
+            if !key.isEmpty { map[key.lowercased()] = current }
+            let bits = line.split(separator: ":", maxSplits: 1).map(String.init)
+            guard bits.count == 2 else { key = ""; continue }
+            key = bits[0]
+            current = bits[1].trimmingCharacters(in: .whitespaces)
+        }
+        if !key.isEmpty { map[key.lowercased()] = current }
+        return map
+    }
+
+    private static func decodedBody(_ body: String, headers: [String: String]) -> String {
+        let type = headers["content-type"]?.lowercased() ?? ""
+        if type.contains("multipart/"), let boundary = type.split(separator: "boundary=").last.map({ $0.trimmingCharacters(in: CharacterSet(charactersIn: "\" \t")) }) {
+            let chunks = body.components(separatedBy: "--\(boundary)")
+            let plain = chunks.first { $0.lowercased().contains("text/plain") }
+            let html = chunks.first { $0.lowercased().contains("text/html") }
+            if let part = plain ?? html { return decodedBody(partBody(part), headers: headerMap(part)) }
+        }
+        let encoding = headers["content-transfer-encoding"]?.lowercased() ?? ""
+        if encoding.contains("base64"), let data = Data(base64Encoded: body.filter { !$0.isWhitespace }) {
+            return String(data: data, encoding: .utf8) ?? body
+        }
+        if encoding.contains("quoted-printable") { return quotedPrintable(body) }
+        if type.contains("text/html") { return body.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression) }
+        return body
+    }
+
+    private static func partBody(_ part: String) -> String {
+        let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = trimmed.range(of: "\n\n") { return String(trimmed[range.upperBound...]) }
+        return trimmed
+    }
+
+    private static func quotedPrintable(_ text: String) -> String {
+        var bytes: [UInt8] = []
+        let scalars = Array(text.utf8)
+        var index = 0
+        while index < scalars.count {
+            if scalars[index] == UInt8(ascii: "=") {
+                if index + 1 < scalars.count, scalars[index + 1] == 10 {
+                    index += 2
+                    continue
+                }
+                if index + 2 < scalars.count, scalars[index + 1] == 13, scalars[index + 2] == 10 {
+                    index += 3
+                    continue
+                }
+                if index + 2 < scalars.count,
+                   let value = UInt8(String(bytes: scalars[index + 1...index + 2], encoding: .ascii) ?? "", radix: 16) {
+                    bytes.append(value)
+                    index += 3
+                    continue
+                }
+            }
+            bytes.append(scalars[index])
+            index += 1
+        }
+        return String(bytes: bytes, encoding: .utf8) ?? String(decoding: bytes, as: UTF8.self)
+    }
+}
+
+enum Outline {
+    static func read(_ url: URL) throws -> String {
+        let parser = OutlineParser()
+        let xml = XMLParser(data: try Data(contentsOf: url))
+        xml.delegate = parser
+        guard xml.parse() else { throw RenvertError.invalidInput(L("The outline could not be read.")) }
+        return parser.lines.joined(separator: "\n") + (parser.lines.isEmpty ? "" : "\n")
+    }
+
+    static func write(_ text: String) -> String {
+        var xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<opml version=\"2.0\"><body>\n"
+        var open = 0
+        for line in text.split(whereSeparator: \.isNewline) {
+            let raw = String(line)
+            let indent = raw.prefix { $0 == " " || $0 == "\t" }.count / 2
+            let title = raw.trimmingCharacters(in: .whitespaces)
+            guard !title.isEmpty else { continue }
+            while open > indent { xml += "</outline>\n"; open -= 1 }
+            xml += "<outline text=\"\(DocxIO.xmlEscape(title))\">\n"
+            open += 1
+        }
+        while open > 0 { xml += "</outline>\n"; open -= 1 }
+        xml += "</body></opml>\n"
+        return xml
+    }
+}
+
+final class OutlineParser: NSObject, XMLParserDelegate {
+    var lines: [String] = []
+    private var depth = 0
+
+    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes: [String: String] = [:]) {
+        let name = elementName.split(separator: ":").last.map(String.init)?.lowercased() ?? ""
+        guard name == "outline" else { return }
+        let title = attributes["text"] ?? attributes["title"] ?? ""
+        if !title.isEmpty {
+            lines.append(String(repeating: "  ", count: depth) + title)
+        }
+        depth += 1
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        let name = elementName.split(separator: ":").last.map(String.init)?.lowercased() ?? ""
+        if name == "outline" { depth = max(0, depth - 1) }
     }
 }
