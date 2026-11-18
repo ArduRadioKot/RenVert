@@ -4,7 +4,7 @@ import CoreImage
 import CoreText
 import Vision
 
-/// Conversions Consul does not do: GPS tracks, contacts, calendars, Base64, QR codes and font previews.
+/// GPS tracks, contacts, calendars, Base64, QR codes and font previews.
 public struct BeyondConverter: Converter {
     public init() {}
 

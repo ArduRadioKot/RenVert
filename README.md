@@ -6,7 +6,7 @@ Native macOS menu-bar utility: **rename a file in Finder to convert its contents
 
 Authors: **FrogeeSoft**.
 
-Renvert is an independent implementation inspired by the public Consul 2.x workflow. It does not include Consul code, assets, or license checks. Files never leave the Mac.
+Renvert is an independent macOS app. Files never leave the Mac.
 
 Requires **macOS 14+**. Builds as a Universal Binary (`arm64` + `x86_64`).
 
@@ -21,7 +21,7 @@ Requires **macOS 14+**. Builds as a Universal Binary (`arm64` + `x86_64`).
 - English and Russian UI strings
 - Finder **Services** entry (“Convert with Renvert”)
 
-See `docs/capabilities.md` for the honest matrix. Renvert does not claim Consul’s full 5,211 pairs.
+See `docs/capabilities.md` for the conversion matrix.
 
 ## Build
 
@@ -47,7 +47,7 @@ For a GitHub release, build from the exact release tag; the version is picked
 up automatically. You can also set it explicitly:
 
 ```bash
-VERSION=1.2.0 ./scripts/build.sh
+VERSION=1.2.1 ./scripts/build.sh
 ./scripts/package-dmg.sh
 ```
 

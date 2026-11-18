@@ -102,7 +102,7 @@ struct ConfirmationView: View {
                             .font(.system(size: 12))
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Text("\(pending.detected.id.rawValue.uppercased()) → \(pending.command.outputs.map { $0.format.rawValue.uppercased() }.joined(separator: ", "))")
+                        Text("\(pending.detected.id.rawValue.uppercased()) → \(pending.command.outputs.map(\.summaryLabel).joined(separator: ", "))")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

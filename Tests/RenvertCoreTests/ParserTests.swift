@@ -67,6 +67,33 @@ final class ParserTests: XCTestCase {
         XCTAssertTrue(TransformationParser.isConversionCandidate(oldName: "a.jpg", newName: "a.jpg+min"))
     }
 
+    func testFlagsAndFormatStillAskWhenFinderKeepsTheExtension() {
+        let hiddenFormat = TransformationParser.interpretRename(oldName: "photo.png", newName: "photo.jpg.png")
+        XCTAssertEqual(hiddenFormat?.outputs, [OutputSpec(format: .jpeg)])
+        XCTAssertEqual(hiddenFormat?.stem, "photo")
+
+        let hiddenFlags = TransformationParser.interpretRename(oldName: "photo.png", newName: "photo.jpg+q80.png")
+        XCTAssertEqual(hiddenFlags?.outputs, [OutputSpec(format: .jpeg, modifiers: [.quality(80)])])
+
+        let flagsInName = TransformationParser.interpretRename(oldName: "photo.png", newName: "photo+q80.png")
+        XCTAssertEqual(flagsInName?.outputs, [OutputSpec(format: .png, modifiers: [.quality(80)])])
+        XCTAssertEqual(flagsInName?.stem, "photo")
+
+        let flagsBeforeNewExtension = TransformationParser.interpretRename(oldName: "photo.png", newName: "photo+q80.jpg")
+        XCTAssertEqual(flagsBeforeNewExtension?.outputs, [OutputSpec(format: .jpeg, modifiers: [.quality(80)])])
+
+        let spaced = TransformationParser.interpretRename(oldName: "photo.png", newName: "photo.jpg +q80")
+        XCTAssertEqual(spaced?.outputs.first?.modifiers, [.quality(80)])
+
+        let dottedFlag = TransformationParser.interpretRename(oldName: "movie.mp4", newName: "movie+at1.5.mp4")
+        XCTAssertEqual(dottedFlag?.outputs.first?.format, .mp4)
+        XCTAssertEqual(dottedFlag?.outputs.first?.atTime(), TimeValue(seconds: 1.5))
+
+        XCTAssertFalse(TransformationParser.isConversionCandidate(oldName: "archive.tar.gz", newName: "backup.tar.gz"))
+        XCTAssertFalse(TransformationParser.isConversionCandidate(oldName: "photo.png", newName: "vacation.png"))
+        XCTAssertFalse(TransformationParser.isConversionCandidate(oldName: "notes.txt", newName: "notes.backup.txt"))
+    }
+
     func testOutputNamerStripsModifiers() {
         let url = OutputNamer.url(
             directory: URL(fileURLWithPath: "/tmp"),

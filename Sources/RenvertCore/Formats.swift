@@ -235,7 +235,7 @@ public let modelReadable: Set<FormatID> = [.obj, .stl, .ply, .usda, .usdc, .usdz
 public let modelWritable: Set<FormatID> = [.obj, .stl, .ply, .usda, .usdc]
 /// Formats with no reliable signature: the name the file had before the rename decides.
 public let extensionOnlyFormats: Set<FormatID> = [.obj, .stl, .tga, .clr]
-/// Tracks, contacts and calendars. Consul does not convert these.
+/// Tracks, contacts and calendars.
 public let geoFormats: Set<FormatID> = [.gpx, .kml, .geojson, .tcx, .nmea, .igc]
 public let bookmarkFormats: Set<FormatID> = [.webloc, .url]
 public let feedFormats: Set<FormatID> = [.rss, .atom]
@@ -273,7 +273,7 @@ private func makeAll() -> [FormatDescriptor] {
         d(.jp2, .image, ["jp2", "j2k", "jpf"], UTType("public.jpeg-2000"), decode: .native, encode: .native),
         d(.ppm, .image, ["ppm", "pbm", "pgm", "pnm"], UTType("public.pbm"), decode: .native, encode: .native, "Netpbm bitmap, written as an 8-bit PPM."),
         d(.exr, .image, ["exr"], UTType("com.ilm.openexr-image"), decode: .native, encode: .native),
-        d(.astc, .image, ["astc"], UTType("org.khronos.astc"), decode: .native, encode: .native, "GPU texture block. Consul does not write ASTC."),
+        d(.astc, .image, ["astc"], UTType("org.khronos.astc"), decode: .native, encode: .native, "GPU texture block."),
         d(.jxl, .image, ["jxl"], UTType("public.jpeg-xl"), decode: .native, encode: .unavailable, "ImageIO reads JPEG XL but cannot write it."),
         d(.nef, .image, ["nef"], UTType("com.nikon.raw-image"), decode: .native, encode: .unavailable),
         d(.orf, .image, ["orf"], UTType("com.olympus.raw-image"), decode: .native, encode: .unavailable),

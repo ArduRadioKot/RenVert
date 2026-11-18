@@ -150,8 +150,18 @@ public struct OutputSpec: Equatable, Sendable {
         self.openSettings = openSettings
     }
 
+    /// Same bytes, no request. Any flag, including `nometa`, is a real conversion.
     public var isIdentityCandidate: Bool {
-        modifiers.filter(\.transformsContent).isEmpty
+        modifiers.isEmpty
+    }
+
+    public var summaryLabel: String {
+        var label = format.rawValue.uppercased()
+        if !modifiers.isEmpty {
+            label += "+" + modifiers.map(\.shortLabel).joined(separator: "+")
+        }
+        if openSettings { label += "+" }
+        return label
     }
 
     public func quality() -> Int? {
@@ -264,13 +274,55 @@ public enum TransformationParser {
             do {
                 let parsed = try parseSuffix(suffix)
                 if FormatRegistry.knows(firstFormatToken(suffix)) {
-                    return ConversionCommand(stem: stem, outputs: parsed.outputs, skipConfirmation: parsed.bang)
+                    return absorbBasenameModifiers(
+                        ConversionCommand(stem: stem, outputs: parsed.outputs, skipConfirmation: parsed.bang)
+                    )
                 }
             } catch {
                 lastError = error
             }
         }
         throw lastError
+    }
+
+    /// The conversion a person asked for by renaming `oldName` to `newName`.
+    ///
+    /// Finder selects the name and leaves the extension in place, so the request often lands
+    /// before the real extension (`photo.jpg.png`, `photo+q80.png`, `photo.jpg +q80.png`).
+    /// Flags typed in the name (`photo+q80.jpg`) count too. A plain stem edit does not.
+    public static func interpretRename(oldName: String, newName: String) -> ConversionCommand? {
+        let oldFile = URL(fileURLWithPath: oldName).lastPathComponent
+        let newFile = URL(fileURLWithPath: newName).lastPathComponent
+        let oldExt = URL(fileURLWithPath: oldFile).pathExtension
+        if !oldExt.isEmpty, newFile.lowercased().hasSuffix("." + oldExt.lowercased()) {
+            let typed = String(newFile.dropLast(oldExt.count + 1))
+            let oldTyped = String(oldFile.dropLast(oldExt.count + 1))
+            if typed.caseInsensitiveCompare(oldTyped) != .orderedSame {
+                if let command = try? parseFilename(typed) {
+                    if let previous = try? parseFilename(oldTyped) {
+                        if command.outputs.map(\.format) != previous.outputs.map(\.format) {
+                            return command
+                        }
+                        if let retargeted = retarget(command, to: oldExt) { return retargeted }
+                    } else {
+                        return command
+                    }
+                }
+                if let added = modifiers(on: oldExt, typed: typed) {
+                    let previous = modifiers(on: oldExt, typed: oldTyped)
+                    if added.outputs != previous?.outputs ?? [] || added.skipConfirmation != (previous?.skipConfirmation ?? false) {
+                        return added
+                    }
+                }
+                if let command = insertedCommand(oldName: oldFile, newName: newFile) { return command }
+            }
+        }
+        guard let command = try? parseFilename(newFile) else { return nil }
+        if command.outputs.contains(where: { !$0.modifiers.isEmpty || $0.openSettings }) || command.outputs.count > 1 {
+            return command
+        }
+        guard let only = command.outputs.first else { return nil }
+        return FormatRegistry.resolve(oldExt) != only.format ? command : nil
     }
 
     public static func parseSuffix(_ suffix: String) throws -> (outputs: [OutputSpec], bang: Bool) {
@@ -287,18 +339,75 @@ public enum TransformationParser {
     }
 
     public static func isConversionCandidate(oldName: String, newName: String) -> Bool {
-        let oldExt = URL(fileURLWithPath: oldName).pathExtension
-        guard let command = try? parseFilename(newName) else { return false }
-        if command.outputs.contains(where: { !$0.modifiers.isEmpty || $0.openSettings }) {
-            return true
+        interpretRename(oldName: oldName, newName: newName) != nil
+    }
+
+    /// `photo+q80.jpg` puts the flags in the name Finder was editing, not after the extension.
+    private static func absorbBasenameModifiers(_ command: ConversionCommand) -> ConversionCommand {
+        let parts = command.stem.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        guard let last = parts.last, let plus = last.firstIndex(of: "+") else { return command }
+        let head = last[..<plus].trimmingCharacters(in: .whitespaces)
+        guard !head.isEmpty, FormatRegistry.resolve(head) == nil else { return command }
+        let rest = last[last.index(after: plus)...].trimmingCharacters(in: .whitespaces)
+        guard let parsed = try? parseSuffix("jpg+\(rest)") else { return command }
+        let extra = parsed.outputs[0]
+        let stem = (parts.dropLast() + [head]).joined(separator: ".")
+        let outputs = command.outputs.map { spec in
+            var copy = spec
+            copy.modifiers.insert(contentsOf: extra.modifiers, at: 0)
+            if extra.openSettings { copy.openSettings = true }
+            return copy
         }
-        if command.outputs.count > 1 { return true }
-        guard let only = command.outputs.first else { return false }
-        let oldID = FormatRegistry.resolve(oldExt)
-        return oldID != only.format
+        return ConversionCommand(stem: stem, outputs: outputs, skipConfirmation: command.skipConfirmation || parsed.bang)
+    }
+
+    /// `photo+q80.png` keeps the original extension and puts the flags in front of it.
+    private static func modifiers(on extensionName: String, typed: String) -> ConversionCommand? {
+        guard let format = FormatRegistry.resolve(extensionName), let plus = typed.firstIndex(of: "+") else { return nil }
+        let stem = typed[..<plus].trimmingCharacters(in: .whitespaces)
+        guard !stem.isEmpty else { return nil }
+        let rest = typed[typed.index(after: plus)...].trimmingCharacters(in: .whitespaces)
+        guard let parsed = try? parseSuffix("\(extensionName)+\(rest)") else { return nil }
+        return ConversionCommand(stem: stem, outputs: parsed.outputs.map { spec in
+            var copy = spec
+            copy.format = format
+            return copy
+        }, skipConfirmation: parsed.bang)
+    }
+
+    /// Flags were added in front of an extension the file already had. Keep that extension.
+    private static func retarget(_ command: ConversionCommand, to extensionName: String) -> ConversionCommand? {
+        guard command.outputs.count == 1, let format = FormatRegistry.resolve(extensionName) else { return nil }
+        var spec = command.outputs[0]
+        guard !spec.modifiers.isEmpty || spec.openSettings else { return nil }
+        spec.format = format
+        return ConversionCommand(stem: command.stem, outputs: [spec], skipConfirmation: command.skipConfirmation)
+    }
+
+    /// One new format token was inserted and the old extension chain was left in place.
+    private static func insertedCommand(oldName: String, newName: String) -> ConversionCommand? {
+        let oldParts = oldName.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        let newParts = newName.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        guard newParts.count == oldParts.count + 1 else { return nil }
+        var suffix = 0
+        while suffix < oldParts.count,
+              oldParts[oldParts.count - 1 - suffix].caseInsensitiveCompare(newParts[newParts.count - 1 - suffix]) == .orderedSame {
+            suffix += 1
+        }
+        guard suffix >= 1 else { return nil }
+        let insertedIndex = newParts.count - suffix - 1
+        guard insertedIndex >= 0,
+              zip(newParts.prefix(insertedIndex), oldParts.prefix(insertedIndex)).allSatisfy({ $0.caseInsensitiveCompare($1) == .orderedSame })
+        else { return nil }
+        let inserted = newParts[insertedIndex]
+        guard FormatRegistry.knows(firstFormatToken(inserted)), let parsed = try? parseSuffix(inserted) else { return nil }
+        let stem = newParts.prefix(insertedIndex).joined(separator: ".")
+        guard !stem.isEmpty else { return nil }
+        return ConversionCommand(stem: stem, outputs: parsed.outputs, skipConfirmation: parsed.bang)
     }
 
     private static func parseOutput(_ scanner: inout Scanner) throws -> OutputSpec {
+        scanner.skipWhitespace()
         let token = scanner.take(while: { $0.isLetter || $0.isNumber })
         guard let format = FormatRegistry.resolve(token) else {
             throw RenvertError.unknownFormat(token)
@@ -306,6 +415,7 @@ public enum TransformationParser {
         var modifiers: [Modifier] = []
         var openSettings = false
         while scanner.consume("+") {
+            scanner.skipWhitespace()
             if scanner.startsWith(",") || scanner.startsWith("!") || scanner.isAtEnd {
                 openSettings = true
                 break
@@ -316,7 +426,8 @@ public enum TransformationParser {
     }
 
     private static func parseModifier(_ scanner: inout Scanner) throws -> Modifier {
-        let token = scanner.take(while: { $0 != "+" && $0 != "," && $0 != "!" })
+        scanner.skipWhitespace()
+        let token = scanner.take(while: { !$0.isWhitespace && $0 != "+" && $0 != "," && $0 != "!" })
         let lower = token.lowercased()
         if lower == "min" { return .min }
         if lower == "nometa" { return .noMeta }
@@ -399,7 +510,7 @@ public enum TransformationParser {
     }
 
     private static func firstFormatToken(_ suffix: String) -> String {
-        let end = suffix.firstIndex(where: { $0 == "+" || $0 == "," || $0 == "!" }) ?? suffix.endIndex
+        let end = suffix.firstIndex(where: { $0 == "+" || $0 == "," || $0 == "!" || $0.isWhitespace }) ?? suffix.endIndex
         return String(suffix[..<end])
     }
 
@@ -517,9 +628,13 @@ struct Scanner {
     }
 
     mutating func consume(_ value: String) -> Bool {
-        let slice = value
-        guard chars.dropFirst(index).starts(with: slice) else { return false }
-        index += slice.count
+        let saved = index
+        skipWhitespace()
+        guard chars.dropFirst(index).starts(with: value) else {
+            index = saved
+            return false
+        }
+        index += value.count
         return true
     }
 

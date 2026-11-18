@@ -351,7 +351,7 @@ assert payload["Pack/sample.npy"][:6] == bytes([0x93]) + b"NUMPY"
         XCTAssertLessThan(try XCTUnwrap(rep.colorAt(x: 4, y: 4)).alphaComponent, 0.1)
     }
 
-    // MARK: Formats Consul does not convert
+    // MARK: Extra image formats
 
     func testImageIOWritesJPEG2000EXRASTCAndPPM() throws {
         let png = try writePNG("tile.png")

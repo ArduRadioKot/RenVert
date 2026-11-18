@@ -197,6 +197,11 @@ final class AppModel: ObservableObject {
         pendingQueue.removeFirst()
     }
 
+    func dismissHistory(_ record: HistoryRecord) {
+        coordinator.history.remove(id: record.id)
+        refreshHistory()
+    }
+
     func undo(_ record: HistoryRecord) {
         do {
             try coordinator.engine.undo(record: record, backups: coordinator.backups, ignore: coordinator.ignore, history: coordinator.history)

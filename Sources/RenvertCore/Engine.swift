@@ -106,7 +106,7 @@ public final class ConversionEngine {
                 let isIdentity = detected.id == spec.format && spec.isIdentityCandidate
                 let dest: URL
                 if keepSourceName, pending.command.outputs.count == 1 {
-                    dest = cleanedURL(for: source, spec: spec)
+                    dest = cleanedURL(for: source, spec: spec, stem: pending.command.stem)
                 } else {
                     dest = OutputNamer.url(
                         directory: source.deletingLastPathComponent(),
@@ -355,14 +355,9 @@ public final class ConversionEngine {
         throw RenvertError.formatMismatch(expected: expected.rawValue, actual: detected.id.rawValue)
     }
 
-    private func cleanedURL(for commandURL: URL, spec: OutputSpec) -> URL {
-        let destName = "\(TransformationParser.safeStem(commandURL.lastPathComponent)).\(FormatRegistry.preferredExtension(for: spec.format))"
-        // Prefer parsed stem from the command name itself.
-        if let parsed = try? TransformationParser.parseFilename(commandURL.lastPathComponent) {
-            return commandURL.deletingLastPathComponent()
-                .appendingPathComponent("\(parsed.stem).\(FormatRegistry.preferredExtension(for: spec.format))")
-        }
-        return commandURL.deletingLastPathComponent().appendingPathComponent(destName)
+    private func cleanedURL(for commandURL: URL, spec: OutputSpec, stem: String) -> URL {
+        commandURL.deletingLastPathComponent()
+            .appendingPathComponent("\(stem).\(FormatRegistry.preferredExtension(for: spec.format))")
     }
 }
 
@@ -490,8 +485,14 @@ public final class RenameCoordinator: FileSystemMonitorDelegate {
             // A rename counts only when the user changed the extension in place.
             let isNewFile = oldURL.standardizedFileURL == newURL.standardizedFileURL
             guard isNewFile || Self.isUserRename(from: oldURL, to: newURL) else { return }
-            guard isNewFile || TransformationParser.isConversionCandidate(oldName: oldURL.lastPathComponent, newName: newURL.lastPathComponent) else { return }
-            let command = try TransformationParser.parseFilename(newURL.lastPathComponent)
+            let command: ConversionCommand
+            if isNewFile {
+                command = try TransformationParser.parseFilename(newURL.lastPathComponent)
+            } else if let parsed = TransformationParser.interpretRename(oldName: oldURL.lastPathComponent, newName: newURL.lastPathComponent) {
+                command = parsed
+            } else {
+                return
+            }
             let detected = try FormatDetector.detect(at: newURL, originalFilename: oldURL.lastPathComponent)
             let settings = settingsStore.settings
             // Nothing to offer: .ipynb is JSON inside, .numbers is a ZIP, and so on. Asking to

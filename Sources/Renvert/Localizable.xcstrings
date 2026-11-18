@@ -935,6 +935,16 @@
         }
       }
     },
+    "Remove": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить"
+          }
+        }
+      }
+    },
     "Remove Folder": {
       "localizations": {
         "ru": {

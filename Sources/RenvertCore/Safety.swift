@@ -55,6 +55,14 @@ public final class HistoryStore: @unchecked Sendable {
         }
     }
 
+    /// Drops one finished item from the menu. The converted file stays where it is.
+    public func remove(id: UUID) {
+        queue.sync {
+            records.removeAll { $0.id == id }
+            persistLocked()
+        }
+    }
+
     private func persistLocked() {
         records = Array(records.prefix(1000))
         if let data = try? JSONEncoder().encode(records) {

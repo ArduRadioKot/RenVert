@@ -190,42 +190,121 @@ struct MenuBarView: View {
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(recents) { record in
-                    HStack(spacing: 10) {
-                        Button {
-                            model.reveal(record.destinationPaths.first ?? record.sourcePath)
-                        } label: {
-                            HStack(spacing: 10) {
-                                statusIcon(for: record)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(URL(fileURLWithPath: record.sourcePath).lastPathComponent)
-                                        .font(.system(size: 13))
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                    Text(record.error ?? record.targetFormats.joined(separator: ", "))
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                Spacer(minLength: 8)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(L("Show in Finder"))
-                        if record.succeeded && !record.undone {
-                            Button(L("Undo")) { model.undo(record) }
-                                .glassButton()
-                                .controlSize(.small)
-                        }
-                    }
-                    .modifier(HoverHighlight())
-                    .padding(.horizontal, -MenuMetrics.inset)
+                    RecentConversionRow(record: record)
+                        .padding(.horizontal, -MenuMetrics.inset)
                 }
             }
+            .animation(.easeOut(duration: 0.18), value: recents)
         }
     }
 
-    private func statusIcon(for record: HistoryRecord) -> some View {
+    private func conversionSummary(_ pending: PendingConversion) -> String {
+        let outputs = pending.command.outputs
+            .map(\.summaryLabel)
+            .joined(separator: ", ")
+        return "\(pending.detected.id.rawValue.uppercased()) → \(outputs)"
+    }
+}
+
+struct FormatBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text.uppercased().prefix(4))
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(width: 34, height: 34)
+            .background(Color.accentColor.gradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+}
+
+/// One finished conversion in the menu bar panel. Swipe left to remove it from the list.
+struct RecentConversionRow: View {
+    @EnvironmentObject private var model: AppModel
+    let record: HistoryRecord
+    @State private var offset: CGFloat = 0
+
+    private let parked: CGFloat = 72
+    private let commit: CGFloat = 120
+
+    var body: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 10) {
+                statusIcon
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(URL(fileURLWithPath: record.sourcePath).lastPathComponent)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(record.error ?? record.targetFormats.joined(separator: ", "))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if offset < 0 {
+                    withAnimation(.snappy(duration: 0.2)) { offset = 0 }
+                } else {
+                    model.reveal(record.destinationPaths.first ?? record.sourcePath)
+                }
+            }
+            .gesture(drag)
+            .help(L("Show in Finder"))
+            if record.succeeded && !record.undone {
+                Button(L("Undo")) { model.undo(record) }
+                    .glassButton()
+                    .controlSize(.small)
+            }
+        }
+        .modifier(HoverHighlight())
+        .offset(x: offset)
+        .overlay(alignment: .trailing) {
+            let revealed = max(0, -offset)
+            if revealed > 0 {
+                Button {
+                    model.dismissHistory(record)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: revealed, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background(Color.red, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityLabel(L("Remove"))
+                .help(L("Remove"))
+            }
+        }
+        .clipped()
+    }
+
+    private var drag: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .local)
+            .onChanged { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                offset = min(0, value.translation.width)
+            }
+            .onEnded { value in
+                let width = value.translation.width
+                guard abs(width) > abs(value.translation.height), width < 0 else {
+                    withAnimation(.snappy(duration: 0.2)) { offset = 0 }
+                    return
+                }
+                if width < -commit {
+                    model.dismissHistory(record)
+                } else if width < -36 {
+                    withAnimation(.snappy(duration: 0.2)) { offset = -parked }
+                } else {
+                    withAnimation(.snappy(duration: 0.2)) { offset = 0 }
+                }
+            }
+    }
+
+    private var statusIcon: some View {
         let symbol: String
         let tint: Color
         if !record.succeeded {
@@ -243,25 +322,6 @@ struct MenuBarView: View {
             .foregroundStyle(.white)
             .frame(width: 26, height: 26)
             .background(tint.gradient, in: Circle())
-    }
-
-    private func conversionSummary(_ pending: PendingConversion) -> String {
-        let outputs = pending.command.outputs
-            .map { FormatRegistry.preferredExtension(for: $0.format) }
-            .joined(separator: ", ")
-        return "\(pending.detected.id.rawValue.uppercased()) → \(outputs)"
-    }
-}
-
-struct FormatBadge: View {
-    let text: String
-
-    var body: some View {
-        Text(text.uppercased().prefix(4))
-            .font(.system(size: 9, weight: .bold, design: .rounded))
-            .foregroundStyle(.white)
-            .frame(width: 34, height: 34)
-            .background(Color.accentColor.gradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 }
 
