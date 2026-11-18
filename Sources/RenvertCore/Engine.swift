@@ -7,14 +7,17 @@ public struct PendingConversion: Identifiable, Sendable {
     public var detected: DetectedFormat
     public var command: ConversionCommand
     public var originalName: String
+    /// Leave the renamed file in place and write the result beside it.
+    public var keepOriginal: Bool
 
-    public init(id: UUID = UUID(), sourceURL: URL, commandURL: URL, detected: DetectedFormat, command: ConversionCommand, originalName: String) {
+    public init(id: UUID = UUID(), sourceURL: URL, commandURL: URL, detected: DetectedFormat, command: ConversionCommand, originalName: String, keepOriginal: Bool = false) {
         self.id = id
         self.sourceURL = sourceURL
         self.commandURL = commandURL
         self.detected = detected
         self.command = command
         self.originalName = originalName
+        self.keepOriginal = keepOriginal
     }
 }
 
@@ -104,10 +107,18 @@ public final class ConversionEngine {
                 }
 
                 let isIdentity = detected.id == spec.format && spec.isIdentityCandidate
-                let dest: URL
+                var dest: URL
                 if keepSourceName, pending.command.outputs.count == 1 {
                     dest = cleanedURL(for: source, spec: spec, stem: pending.command.stem)
                 } else {
+                    dest = OutputNamer.url(
+                        directory: source.deletingLastPathComponent(),
+                        stem: pending.command.stem,
+                        spec: spec,
+                        collidingWith: destinations + [source]
+                    )
+                }
+                if pending.keepOriginal, dest.standardizedFileURL == source.standardizedFileURL {
                     dest = OutputNamer.url(
                         directory: source.deletingLastPathComponent(),
                         stem: pending.command.stem,
@@ -183,7 +194,7 @@ public final class ConversionEngine {
                 }
             }
 
-            if !destinations.contains(where: { $0.standardizedFileURL == source.standardizedFileURL }) {
+            if !pending.keepOriginal, !destinations.contains(where: { $0.standardizedFileURL == source.standardizedFileURL }) {
                 ignore.remember(url: source, key: try? FileIdentity.key(for: source))
                 try FileManager.default.removeItem(at: source)
             }

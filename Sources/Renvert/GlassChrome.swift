@@ -16,6 +16,10 @@ enum GlassHost {
     /// NavigationSplitView takes the window's size instead of its own ideal height.
     static func make<Content: View>(_ root: Content, cornerRadius: CGFloat = 0, fitsContent: Bool) -> NSView {
         let hosting = InteractiveHostingView(rootView: root)
+        hosting.wantsLayer = true
+        hosting.focusRingType = .none
+        hosting.layer?.backgroundColor = NSColor.clear.cgColor
+        hosting.layer?.isOpaque = false
         if !fitsContent {
             hosting.sizingOptions = []
             // Lets `navigationTitle` and SwiftUI toolbars drive the window's title bar.
@@ -29,7 +33,8 @@ enum GlassHost {
             // turns into a near-black slab in Dark Mode, so a white tint lifts it toward the
             // lighter tone of Apple's own panels.
             glass.style = .regular
-            glass.cornerRadius = cornerRadius
+            // The glass draws a dark fringe on its own edge. Extend it past the clip so that fringe is cut off.
+            glass.cornerRadius = cornerRadius > 0 ? cornerRadius + 1 : 0
             glass.tintColor = NSColor(name: nil) { appearance in
                 let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
                 // Dark mode gets a black veil, which darkens the glass instead of lifting it.
@@ -48,18 +53,63 @@ enum GlassHost {
         }
 
         let container = NSView()
-        for view in [backdrop, hosting] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(view)
-            NSLayoutConstraint.activate([
-                view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-                view.topAnchor.constraint(equalTo: container.topAnchor),
-                view.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-            ])
+        container.focusRingType = .none
+        let glassOutset: CGFloat
+        if #available(macOS 26, *), cornerRadius > 0, backdrop is NSGlassEffectView {
+            glassOutset = 1
+        } else {
+            glassOutset = 0
+        }
+        pin(backdrop, to: container, outset: glassOutset)
+        pin(hosting, to: container, outset: 0)
+        container.wantsLayer = true
+        container.clipsToBounds = true
+        container.layer?.backgroundColor = NSColor.clear.cgColor
+        container.layer?.isOpaque = false
+        if cornerRadius > 0 {
+            container.layer?.cornerRadius = cornerRadius
+            container.layer?.masksToBounds = true
         }
         return container
     }
+
+    private static func pin(_ view: NSView, to container: NSView, outset: CGFloat) {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: -outset),
+            view.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: outset),
+            view.topAnchor.constraint(equalTo: container.topAnchor, constant: -outset),
+            view.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: outset)
+        ])
+    }
+
+    /// The panel's frame view is a square. Past the rounded glass it stays black, which reads as a border.
+    static func clearFrame(of window: NSWindow, cornerRadius: CGFloat) {
+        guard cornerRadius > 0, let content = window.contentView, !clearingFrame else { return }
+        clearingFrame = true
+        defer { clearingFrame = false }
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let scale = window.backingScaleFactor > 1
+            ? window.backingScaleFactor
+            : (window.screen ?? NSScreen.main)?.backingScaleFactor ?? 2
+        for view in [content, content.superview].compactMap({ $0 }) {
+            view.wantsLayer = true
+            view.clipsToBounds = true
+            view.focusRingType = .none
+            view.layer?.backgroundColor = NSColor.clear.cgColor
+            view.layer?.isOpaque = false
+            view.layer?.borderWidth = 0
+            view.layer?.borderColor = NSColor.clear.cgColor
+            view.layer?.cornerRadius = cornerRadius
+            view.layer?.masksToBounds = true
+            view.layer?.contentsScale = scale
+        }
+        window.invalidateShadow()
+    }
+
+    private static var clearingFrame = false
 
     private static func roundedMask(radius: CGFloat) -> NSImage {
         let edge = radius * 2 + 1
@@ -120,6 +170,7 @@ enum AppActivation {
 /// Hosting view that accepts the click that also makes the panel key.
 final class InteractiveHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var isOpaque: Bool { false }
 }
 
 /// Grouped-box platter for banners and grouped rows outside a Form.

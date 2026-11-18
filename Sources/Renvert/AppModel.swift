@@ -197,6 +197,37 @@ final class AppModel: ObservableObject {
         pendingQueue.removeFirst()
     }
 
+    func setKeepOriginal(_ keep: Bool) {
+        guard !pendingQueue.isEmpty else { return }
+        pendingQueue[0].keepOriginal = keep
+    }
+
+    /// Quality for this prompt only. One hundred is the best.
+    func setPendingQuality(_ percent: Int) {
+        guard !pendingQueue.isEmpty else { return }
+        let value = min(100, max(1, percent))
+        var pending = pendingQueue[0]
+        pending.command.outputs = pending.command.outputs.map { spec in
+            var copy = spec
+            copy.modifiers.removeAll { if case .quality = $0 { return true } else { return false } }
+            copy.modifiers.insert(.quality(value), at: 0)
+            return copy
+        }
+        pendingQueue[0] = pending
+    }
+
+    /// Stop watching the folder that holds the file waiting for confirmation.
+    func excludePendingFolder() {
+        guard let pending = pendingQueue.first else { return }
+        let folder = pending.commandURL.deletingLastPathComponent().path
+        updateSettings { settings in
+            if !settings.excludedPaths.contains(folder) {
+                settings.excludedPaths.append(folder)
+            }
+        }
+        declinePending()
+    }
+
     func dismissHistory(_ record: HistoryRecord) {
         coordinator.history.remove(id: record.id)
         refreshHistory()

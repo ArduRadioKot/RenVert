@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 #if canImport(RenvertCore)
 import RenvertCore
 #endif
@@ -53,30 +54,9 @@ struct MenuBarView: View {
             }
 
             if let pending = model.pendingConfirmation {
-                MenuSection(title: L("Convert")) {
-                    HStack(spacing: 10) {
-                        FormatBadge(text: pending.detected.id.rawValue)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(pending.commandURL.lastPathComponent)
-                                .font(.system(size: 13, weight: .medium))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Text(conversionSummary(pending))
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    HStack(spacing: 8) {
-                        Spacer(minLength: 0)
-                        Button(L("Skip")) { model.declinePending() }
-                            .glassButton()
-                        Button(L("Convert")) { model.confirmPending() }
-                            .keyboardShortcut(.defaultAction)
-                            .glassButton(prominent: true)
-                    }
-                    .controlSize(.regular)
-                }
+                ConversionPrompt(pending: pending)
+                    .id(pending.id)
+                    .padding(.horizontal, 4)
             }
 
             MenuSection(title: L("Recent"), spacing: 2) {
@@ -198,12 +178,6 @@ struct MenuBarView: View {
         }
     }
 
-    private func conversionSummary(_ pending: PendingConversion) -> String {
-        let outputs = pending.command.outputs
-            .map(\.summaryLabel)
-            .joined(separator: ", ")
-        return "\(pending.detected.id.rawValue.uppercased()) → \(outputs)"
-    }
 }
 
 struct FormatBadge: View {
@@ -223,6 +197,7 @@ struct RecentConversionRow: View {
     @EnvironmentObject private var model: AppModel
     let record: HistoryRecord
     @State private var offset: CGFloat = 0
+    @StateObject private var trackpad = TrackpadSwipe()
 
     private let parked: CGFloat = 72
     private let commit: CGFloat = 120
@@ -260,6 +235,13 @@ struct RecentConversionRow: View {
             }
         }
         .modifier(HoverHighlight())
+        .onHover { inside in
+            if inside {
+                trackpad.arm()
+            } else {
+                trackpad.disarm()
+            }
+        }
         .offset(x: offset)
         .overlay(alignment: .trailing) {
             let revealed = max(0, -offset)
@@ -280,6 +262,25 @@ struct RecentConversionRow: View {
             }
         }
         .clipped()
+        .onAppear { bindTrackpad() }
+        .onChange(of: offset) { _, _ in bindTrackpad() }
+        .onDisappear { trackpad.disarm() }
+    }
+
+    private func bindTrackpad() {
+        trackpad.onChange = { offset = min(0, $0) }
+        trackpad.onEnd = { settle($0) }
+        trackpad.currentOffset = { offset }
+    }
+
+    private func settle(_ width: CGFloat) {
+        if width < -commit {
+            model.dismissHistory(record)
+        } else if width < -36 {
+            withAnimation(.snappy(duration: 0.2)) { offset = -parked }
+        } else {
+            withAnimation(.snappy(duration: 0.2)) { offset = 0 }
+        }
     }
 
     private var drag: some Gesture {
@@ -291,16 +292,10 @@ struct RecentConversionRow: View {
             .onEnded { value in
                 let width = value.translation.width
                 guard abs(width) > abs(value.translation.height), width < 0 else {
-                    withAnimation(.snappy(duration: 0.2)) { offset = 0 }
+                    settle(0)
                     return
                 }
-                if width < -commit {
-                    model.dismissHistory(record)
-                } else if width < -36 {
-                    withAnimation(.snappy(duration: 0.2)) { offset = -parked }
-                } else {
-                    withAnimation(.snappy(duration: 0.2)) { offset = 0 }
-                }
+                settle(width)
             }
     }
 
@@ -322,6 +317,80 @@ struct RecentConversionRow: View {
             .foregroundStyle(.white)
             .frame(width: 26, height: 26)
             .background(tint.gradient, in: Circle())
+    }
+}
+
+/// Two-finger trackpad swipe. AppKit reports it as a scroll, not a drag.
+final class TrackpadSwipe: ObservableObject {
+    var onChange: ((CGFloat) -> Void)?
+    var onEnd: ((CGFloat) -> Void)?
+    var currentOffset: () -> CGFloat = { 0 }
+
+    private var monitor: Any?
+    private var base: CGFloat = 0
+    private var moved: CGFloat = 0
+    private var tracking = false
+    private var ignoreMomentum = false
+
+    func arm() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            self?.handle(event) ?? event
+        }
+    }
+
+    func disarm() {
+        if tracking {
+            let width = base + moved
+            tracking = false
+            moved = 0
+            onEnd?(width)
+        }
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+    }
+
+    private func handle(_ event: NSEvent) -> NSEvent? {
+        let trackpad = event.phase != [] || event.momentumPhase != []
+        guard trackpad else { return event }
+
+        if event.momentumPhase != [] {
+            if ignoreMomentum {
+                if event.momentumPhase == .ended { ignoreMomentum = false }
+                return nil
+            }
+            return event
+        }
+
+        let dx = event.scrollingDeltaX
+        let dy = event.scrollingDeltaY
+        if !tracking {
+            guard event.phase == .began || event.phase == .changed, abs(dx) > abs(dy) else { return event }
+            tracking = true
+            base = currentOffset()
+            moved = 0
+        }
+
+        // Follow the fingers. Natural scrolling already matches them; the other setting does not.
+        let finger = event.isDirectionInvertedFromDevice ? dx : -dx
+        moved += finger
+        let width = base + moved
+        onChange?(width)
+
+        if event.phase == .ended || event.phase == .cancelled {
+            tracking = false
+            ignoreMomentum = true
+            let final = width
+            moved = 0
+            onEnd?(final)
+        }
+        return nil
+    }
+
+    deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
     }
 }
 

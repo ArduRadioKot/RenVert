@@ -58,18 +58,22 @@ final class StatusBarController: NSObject {
             fitsContent: true
         )
         let panel = MenuPanel(
-            contentRect: NSRect(origin: .zero, size: content.fittingSize),
-            styleMask: [.borderless, .nonactivatingPanel],
+            contentRect: NSRect(origin: .zero, size: Self.pixelSize(content.fittingSize)),
+            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        panel.level = .popUpMenu
+        panel.titlebarAppearsTransparent = true
+        panel.titlebarSeparatorStyle = .none
+        // `.popUpMenu` makes the window server draw a menu frame, which shows up as a black border.
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue - 1)
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .transient]
         panel.contentView = content
+        GlassHost.clearFrame(of: panel, cornerRadius: Self.panelCornerRadius)
         panel.onCancel = { [weak self] in self?.dismissPanel() }
         self.panel = panel
         positionPanel()
@@ -84,7 +88,12 @@ final class StatusBarController: NSObject {
                 }
             },
             center.addObserver(forName: NSWindow.didResizeNotification, object: panel, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.positionPanel() }
+                MainActor.assumeIsolated {
+                    if let panel = self?.panel {
+                        GlassHost.clearFrame(of: panel, cornerRadius: Self.panelCornerRadius)
+                    }
+                    self?.positionPanel()
+                }
             }
         ]
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
@@ -105,6 +114,16 @@ final class StatusBarController: NSObject {
         panel.alphaValue = 1
         content.alphaValue = 1
         panel.makeKeyAndOrderFront(nil)
+        // AppKit rebuilds the frame view as the panel becomes key, and that frame is black until cleared again.
+        GlassHost.clearFrame(of: panel, cornerRadius: Self.panelCornerRadius)
+        panel.invalidateShadow()
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                guard panel.isVisible else { return }
+                GlassHost.clearFrame(of: panel, cornerRadius: Self.panelCornerRadius)
+                panel.invalidateShadow()
+            }
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -158,6 +177,15 @@ final class StatusBarController: NSObject {
 
     private static let panelCornerRadius: CGFloat = 16
 
+    /// A fractional window size leaves a 1px black edge on a clear panel.
+    private static func pixelSize(_ size: NSSize) -> NSSize {
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        return NSSize(
+            width: (size.width * scale).rounded(.up) / scale,
+            height: (size.height * scale).rounded(.up) / scale
+        )
+    }
+
     /// New status items land at the far left of the extras, which is behind the notch on MacBooks.
     /// macOS reads this per-item default, measured from the right screen edge, before placing the item.
     private static func preferRightSide() {
@@ -176,6 +204,36 @@ private final class MenuPanel: NSPanel {
     var onCancel: (() -> Void)?
 
     override var canBecomeKey: Bool { true }
+    override var isOpaque: Bool {
+        get { false }
+        set { super.isOpaque = false }
+    }
+
+    override var backgroundColor: NSColor? {
+        get { super.backgroundColor }
+        set { super.backgroundColor = .clear }
+    }
+
+    /// A borderless panel otherwise keeps a one-point frame, and that frame is black.
+    override func contentRect(forFrameRect frameRect: NSRect) -> NSRect { frameRect }
+    override func frameRect(forContentRect contentRect: NSRect) -> NSRect { contentRect }
+
+    override func setContentSize(_ size: NSSize) {
+        let snapped = Self.pixelSize(size)
+        let current = frame.size
+        if abs(current.width - snapped.width) < 0.01, abs(current.height - snapped.height) < 0.01 {
+            return
+        }
+        super.setContentSize(snapped)
+    }
+
+    private static func pixelSize(_ size: NSSize) -> NSSize {
+        let scale = max((NSScreen.main)?.backingScaleFactor ?? 2, 1)
+        return NSSize(
+            width: (size.width * scale).rounded(.up) / scale,
+            height: (size.height * scale).rounded(.up) / scale
+        )
+    }
 
     override func cancelOperation(_ sender: Any?) {
         onCancel?()

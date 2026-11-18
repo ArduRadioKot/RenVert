@@ -69,6 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(forName: .renvertOpenSettings, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.presentSettings() }
         }
+        NotificationCenter.default.addObserver(forName: .renvertConfirmationHeight, object: nil, queue: .main) { [weak self] note in
+            let height = note.object as? CGFloat ?? 0
+            Task { @MainActor in self?.resizeConfirmation(height: height) }
+        }
         NotificationCenter.default.addObserver(forName: .renvertKeepStatusVisible, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
@@ -176,18 +180,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let existing = confirmPanel {
             panel = existing
         } else {
-            panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 400, height: 170),
-                styleMask: [.titled, .closable, .nonactivatingPanel, .fullSizeContentView],
+            panel = ConfirmationPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 340, height: 460),
+                styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
-            panel.title = "Renvert"
             panel.level = .floating
             panel.isFloatingPanel = true
             panel.hidesOnDeactivate = false
             panel.isReleasedWhenClosed = false
-            install(ConfirmationView(), in: panel, chromeless: true)
+            panel.hasShadow = true
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            install(ConfirmationView(), in: panel, chromeless: true, cornerRadius: 22)
             confirmPanel = panel
         }
         if let screen = NSScreen.main {
@@ -198,6 +204,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ))
         }
         panel.orderFrontRegardless()
+    }
+
+    private func resizeConfirmation(height: CGFloat) {
+        guard let panel = confirmPanel, height > 1 else { return }
+        let width: CGFloat = 340
+        let screen = panel.screen ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? panel.frame
+        var frame = panel.frame
+        let top = frame.height > 1 ? frame.maxY : visible.maxY - 12
+        frame.size = NSSize(width: width, height: height)
+        frame.origin.x = min(max(visible.maxX - width - 16, visible.minX + 8), visible.maxX - width - 8)
+        frame.origin.y = min(max(top - height, visible.minY + 8), visible.maxY - height - 12)
+        panel.setFrame(frame, display: true)
+        GlassHost.clearFrame(of: panel, cornerRadius: 22)
     }
 
     private func makeWindow<Content: View>(
@@ -222,14 +242,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Liquid Glass window with standard macOS controls on top.
     ///
     /// `chromeless` hides the title, for the welcome window and the confirmation panel.
-    private func install<Content: View>(_ root: Content, in window: NSWindow, chromeless: Bool) {
+    private func install<Content: View>(_ root: Content, in window: NSWindow, chromeless: Bool, cornerRadius: CGFloat = 0) {
         window.titlebarAppearsTransparent = true
         if chromeless {
             window.titleVisibility = .hidden
         }
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.contentView = GlassHost.make(LocalizedRoot(model: model) { root }, fitsContent: false)
+        window.contentView = GlassHost.make(LocalizedRoot(model: model) { root }, cornerRadius: cornerRadius, fitsContent: false)
+        if cornerRadius > 0 {
+            GlassHost.clearFrame(of: window, cornerRadius: cornerRadius)
+        }
+    }
+}
+
+private final class ConfirmationPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var isOpaque: Bool {
+        get { false }
+        set { super.isOpaque = false }
+    }
+
+    override func contentRect(forFrameRect frameRect: NSRect) -> NSRect { frameRect }
+    override func frameRect(forContentRect contentRect: NSRect) -> NSRect { contentRect }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown || event.type == .rightMouseDown {
+            makeKey()
+        }
+        super.sendEvent(event)
     }
 }
 
@@ -252,4 +293,5 @@ extension Notification.Name {
     static let renvertCloseOnboarding = Notification.Name("renvert.closeOnboarding")
     static let renvertOpenSettings = Notification.Name("renvert.openSettings")
     static let renvertKeepStatusVisible = Notification.Name("renvert.keepStatusVisible")
+    static let renvertConfirmationHeight = Notification.Name("renvert.confirmationHeight")
 }

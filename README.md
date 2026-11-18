@@ -47,7 +47,7 @@ For a GitHub release, build from the exact release tag; the version is picked
 up automatically. You can also set it explicitly:
 
 ```bash
-VERSION=1.2.1 ./scripts/build.sh
+VERSION=1.2.3 ./scripts/build.sh
 ./scripts/package-dmg.sh
 ```
 

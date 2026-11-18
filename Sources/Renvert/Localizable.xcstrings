@@ -6,7 +6,7 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Нативная утилита для macOS: переименуйте файл — и он сконвертируется. Файлы не покидают этот Mac."
+            "value": "Нативная утилита для macOS: переименуйте файл, и он сконвертируется. Файлы не покидают этот Mac."
           }
         }
       }
@@ -850,7 +850,7 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Содержимое PEM — некорректный Base64."
+            "value": "Содержимое PEM не является корректным Base64."
           }
         }
       }
@@ -960,7 +960,7 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Переименуйте — конвертируется"
+            "value": "Переименуйте, конвертируется"
           }
         }
       }
@@ -1547,167 +1547,412 @@
     },
     "Formats": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Форматы" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Форматы"
+          }
+        }
       }
     },
     "Search formats": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Найти формат" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Найти формат"
+          }
+        }
       }
     },
     "Enable all": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Включить все" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включить все"
+          }
+        }
       }
     },
     "Turn all off": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Выключить все" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выключить все"
+          }
+        }
       }
     },
     "Turn on": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Включить" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включить"
+          }
+        }
       }
     },
     "Turn off": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Выключить" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выключить"
+          }
+        }
       }
     },
     "Turn a format off and Renvert will ignore it when you rename a file.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Выключите формат, и Renvert не будет конвертировать его при переименовании." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выключите формат, и Renvert не будет конвертировать его при переименовании."
+          }
+        }
       }
     },
     "“%@” is turned off in Settings.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "«%@» выключен в настройках." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» выключен в настройках."
+          }
+        }
       }
     },
     "Images": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Изображения" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изображения"
+          }
+        }
       }
     },
     "Audio": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Аудио" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Аудио"
+          }
+        }
       }
     },
     "Video": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Видео" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Видео"
+          }
+        }
       }
     },
     "Mail": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Почта" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Почта"
+          }
+        }
       }
     },
     "Spreadsheets": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Таблицы" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Таблицы"
+          }
+        }
       }
     },
     "Config": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Конфигурация" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Конфигурация"
+          }
+        }
       }
     },
     "Tracks": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Треки" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Треки"
+          }
+        }
       }
     },
     "Archives": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Архивы" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Архивы"
+          }
+        }
       }
     },
     "Fonts": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Шрифты" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шрифты"
+          }
+        }
       }
     },
     "3D models": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "3D-модели" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3D-модели"
+          }
+        }
       }
     },
     "Subtitles": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Субтитры" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Субтитры"
+          }
+        }
       }
     },
     "Certificates": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Сертификаты" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сертификаты"
+          }
+        }
       }
     },
     "Folder": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Папка" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка"
+          }
+        }
       }
     },
     "E-books": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Книги" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Книги"
+          }
+        }
       }
     },
     "No link was found.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Ссылка не найдена." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка не найдена."
+          }
+        }
       }
     },
     "No feed items were found.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "В ленте нет записей." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В ленте нет записей."
+          }
+        }
       }
     },
     "The feed could not be read.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось прочитать ленту." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать ленту."
+          }
+        }
       }
     },
     "No playlist entries were found.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "В плейлисте нет записей." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В плейлисте нет записей."
+          }
+        }
       }
     },
     "Palettes": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Палитры" } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Палитры"
+          }
+        }
       }
     },
     "No bibliography entries were found.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "В библиографии нет записей." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В библиографии нет записей."
+          }
+        }
       }
     },
     "No directory entries were found.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "В каталоге нет записей." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В каталоге нет записей."
+          }
+        }
       }
     },
     "No colors were found.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Цвета не найдены." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цвета не найдены."
+          }
+        }
       }
     },
     "The archive has no files.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "В архиве нет файлов." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В архиве нет файлов."
+          }
+        }
       }
     },
     "The archive has too many files.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "В архиве слишком много файлов." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В архиве слишком много файлов."
+          }
+        }
       }
     },
     "A file in the archive is larger than 4 GB.": {
       "localizations": {
-        "ru": { "stringUnit": { "state": "translated", "value": "Файл в архиве больше 4 ГБ." } }
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл в архиве больше 4 ГБ."
+          }
+        }
+      }
+    },
+    "actual": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "фактический"
+          }
+        }
+      }
+    },
+    "expected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ожидаемый"
+          }
+        }
+      }
+    },
+    "Conversion settings": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки конвертации"
+          }
+        }
+      }
+    },
+    "Convert Now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Конвертировать"
+          }
+        }
+      }
+    },
+    "Keep original file": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оставить исходный файл"
+          }
+        }
+      }
+    },
+    "Exclude \"%@\"": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Исключить «%@»"
+          }
+        }
+      }
+    },
+    "Quality": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Качество"
+          }
+        }
+      }
+    },
+    "No extra settings for this conversion.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для этой конвертации нет дополнительных настроек."
+          }
+        }
       }
     }
   },

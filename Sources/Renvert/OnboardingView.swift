@@ -91,47 +91,33 @@ struct ConfirmationView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        Group {
             if let pending = model.pendingConfirmation {
-                HStack(spacing: 12) {
-                    FormatBadge(text: pending.detected.id.rawValue)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(L("Convert this file?"))
-                            .font(.system(size: 13, weight: .semibold))
-                        Text(pending.commandURL.lastPathComponent)
-                            .font(.system(size: 12))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Text("\(pending.detected.id.rawValue.uppercased()) → \(pending.command.outputs.map(\.summaryLabel).joined(separator: ", "))")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                ConversionPrompt(pending: pending)
+                    .id(pending.id)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 340)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(key: ConfirmationHeightKey.self, value: proxy.size.height)
+                        }
                     }
-                }
-                Spacer(minLength: 0)
-                HStack(spacing: 8) {
-                    Button(L("Show in Finder")) {
-                        model.reveal(pending.commandURL.path)
-                    }
-                    .glassButton()
-                    .fixedSize()
-                    Spacer(minLength: 8)
-                    Button(L("Skip")) { model.declinePending() }
-                        .glassButton()
-                        .fixedSize()
-                    Button(L("Convert")) { model.confirmPending() }
-                        .keyboardShortcut(.defaultAction)
-                        .glassButton(prominent: true)
-                        .fixedSize()
-                }
             } else {
                 Text(L("No pending conversion"))
                     .foregroundStyle(.secondary)
+                    .frame(width: 340, height: 80)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 34)
-        .padding(.bottom, 18)
-        .frame(width: 400, height: 170)
+        .onPreferenceChange(ConfirmationHeightKey.self) { height in
+            guard height > 1 else { return }
+            NotificationCenter.default.post(name: .renvertConfirmationHeight, object: height)
+        }
+    }
+}
+
+private struct ConfirmationHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
